@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: mcp-workday-server
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:render
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WORKDAY_CLIENT_ID
+        sync: false
+      - key: WORKDAY_CLIENT_SECRET
+        sync: false
+      - key: WORKDAY_TOKEN_ENDPOINT
+        sync: false
+      - key: WORKDAY_AUTH_ENDPOINT
+        sync: false
+      - key: WORKDAY_BASE_URL
+        sync: false
+      - key: WORKDAY_TENANT
+        sync: false
+      - key: WORKDAY_REDIRECT_URI
+        sync: false
+      - key: WORKDAY_BEARER_TOKEN
+        sync: false 
