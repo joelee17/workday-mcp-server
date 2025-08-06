@@ -16,6 +16,7 @@ import path from 'path';
 import * as staffingApi from './staffing-api.js';
 // SOAP API removed - using REST API only
 import * as learningApi from './learning-api.js';
+import { ALL_TOOLS } from './tools-definitions.js';
 
 // Create server instance
 const server = new Server(
@@ -125,54 +126,10 @@ async function getValidAccessToken(): Promise<string> {
   return tokens.access_token;
 }
 
-// Set up all MCP handlers (copied from main index.ts)
+// Set up all MCP handlers (using shared tools definition)
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: [
-      // Auth tools
-      {
-        name: 'check_workday_auth_status',
-        description: 'Check current Workday authentication status',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      // Workday API tools
-      {
-        name: 'get_workday_worker',
-        description: 'Get Workday worker information by employee ID',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            workerId: { type: 'string', description: 'Employee ID or Worker ID' },
-          },
-          required: ['workerId'],
-        },
-      },
-      {
-        name: 'list_workday_workers',
-        description: 'List Workday workers with optional limit',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            limit: { type: 'number', description: 'Maximum number of workers to return (default: 10)' },
-          },
-        },
-      },
-      {
-        name: 'search_workday_workers',
-        description: 'Search Workday workers by name or other criteria',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            searchTerm: { type: 'string', description: 'Search term (name, email, etc.)' },
-          },
-          required: ['searchTerm'],
-        },
-      },
-      // Add more tools as needed from the original index.ts
-    ],
+    tools: ALL_TOOLS,
   };
 });
 
@@ -464,50 +421,7 @@ app.get('/health', (req: Request, res: Response) => {
 // MCP tools endpoint
 app.get('/mcp/tools', async (req: Request, res: Response) => {
   try {
-    const tools = [
-
-      {
-        name: 'check_workday_auth_status',
-        description: 'Check current Workday authentication status',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'get_workday_worker',
-        description: 'Get Workday worker information by employee ID',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            workerId: { type: 'string', description: 'Employee ID or Worker ID' },
-          },
-          required: ['workerId'],
-        },
-      },
-      {
-        name: 'list_workday_workers',
-        description: 'List Workday workers with optional limit',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            limit: { type: 'number', description: 'Maximum number of workers to return (default: 10)' },
-          },
-        },
-      },
-      {
-        name: 'search_workday_workers',
-        description: 'Search Workday workers by name or other criteria',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            searchTerm: { type: 'string', description: 'Search term (name, email, etc.)' },
-          },
-          required: ['searchTerm'],
-        },
-      },
-    ];
-    res.json({ tools });
+    res.json({ tools: ALL_TOOLS });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
