@@ -431,8 +431,25 @@ app.get('/mcp/capabilities', (req: Request, res: Response) => {
     serverInfo: {
       name: "mcp-workday-server",
       version: "1.0.0"
+    },
+    endpoints: {
+      tools: "/mcp/tools",
+      sse: "/mcp/sse",
+      execute: "/mcp/tools/{toolName}"
     }
   });
+});
+
+// Quick SSE endpoint that closes immediately after sending tools
+app.get('/mcp/sse-quick', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  
+  // Send tools and close immediately
+  res.write('event: tools\n');
+  res.write('data: ' + JSON.stringify({ tools: ALL_TOOLS }) + '\n\n');
+  res.end();
 });
 
 // MCP tools endpoint
@@ -451,19 +468,36 @@ app.get('/mcp/sse', (req: Request, res: Response) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
   
-  // Send initial connection event
-  res.write('event: connected\n');
-  res.write('data: {"status":"connected","tools":' + JSON.stringify(ALL_TOOLS) + '}\n\n');
+  // Send initial connection event with tools
+  res.write('event: tools\n');
+  res.write('data: ' + JSON.stringify({ tools: ALL_TOOLS }) + '\n\n');
   
-  // Keep connection alive
+  // Send completion event and close for one-shot clients
+  res.write('event: complete\n');
+  res.write('data: {"status":"ready","toolCount":' + ALL_TOOLS.length + '}\n\n');
+  
+  // Close connection after initial data for one-shot mode
+  const closeParam = req.query.close;
+  if (closeParam === 'true' || closeParam === '1') {
+    res.end();
+    return;
+  }
+  
+  // Keep connection alive for streaming mode
   const keepAlive = setInterval(() => {
     res.write('event: ping\n');
-    res.write('data: {"type":"ping"}\n\n');
+    res.write('data: {"type":"ping","timestamp":"' + new Date().toISOString() + '"}\n\n');
   }, 30000);
   
   req.on('close', () => {
     clearInterval(keepAlive);
   });
+  
+  // Auto-close after 5 minutes for non-streaming clients
+  setTimeout(() => {
+    clearInterval(keepAlive);
+    res.end();
+  }, 300000);
 });
 
 // MCP tool execution endpoint
