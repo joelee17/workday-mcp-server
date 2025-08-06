@@ -451,6 +451,50 @@ app.get('/functions', (req: Request, res: Response) => {
   });
 });
 
+// Flowise MCP Server format (exact format from search results)
+app.get('/mcp', (req: Request, res: Response) => {
+  res.json({
+    mcpServers: {
+      "workday-mcp-server": {
+        command: "mcp-proxy",
+        args: ["https://mcp-workday-server.onrender.com/mcp/sse"],
+        env: {},
+        tools: ALL_TOOLS.map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema
+        }))
+      }
+    }
+  });
+});
+
+// Simple tools list for Flowise (minimal format)
+app.get('/tools', (req: Request, res: Response) => {
+  res.json(ALL_TOOLS.map(tool => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema
+  })));
+});
+
+// Flowise custom tools format (may be what Flowise expects for URL parameter)
+app.get('/custom-tools', (req: Request, res: Response) => {
+  res.json({
+    tools: ALL_TOOLS,
+    server: {
+      name: "workday-mcp-server",
+      version: "1.0.0",
+      description: "Workday MCP Server with comprehensive API tools"
+    },
+    capabilities: {
+      tools: true,
+      resources: false,
+      prompts: false
+    }
+  });
+});
+
 // MCP capability endpoint for spec compliance
 app.get('/mcp/capabilities', (req: Request, res: Response) => {
   res.json({
