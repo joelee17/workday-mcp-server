@@ -14,6 +14,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { workdayAuth } from './workday-auth.js';
+import { oauthFlow } from './oauth-flow.js';
 import * as staffingApi from './staffing-api.js';
 // SOAP API removed - using REST API only
 import * as learningApi from './learning-api.js';
@@ -419,6 +420,113 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// OAuth Authorization Endpoints
+app.get('/oauth/authorize', (req: Request, res: Response) => {
+  try {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const { authUrl, state } = oauthFlow.generateAuthUrl(baseUrl);
+    
+    // Return HTML page with OAuth popup button
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Workday OAuth Authorization</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+            .button { background-color: #007cba; color: white; padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+            .button:hover { background-color: #005a87; }
+            .info { background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        </style>
+    </head>
+    <body>
+        <h1>🔐 Workday MCP Server Authorization</h1>
+        <div class="info">
+            <p><strong>Authorization Required:</strong> Click the button below to authorize this MCP server to access your Workday account.</p>
+            <p><strong>State ID:</strong> <code>${state}</code></p>
+        </div>
+        
+        <button class="button" onclick="openOAuthPopup()">
+            🚀 Authorize with Workday
+        </button>
+        
+        <div id="status" style="margin-top: 20px;"></div>
+        
+        ${oauthFlow.getPopupScript(authUrl)}
+        
+        <script>
+            // Check if we're in the callback flow
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('success') === 'true') {
+                document.getElementById('status').innerHTML = 
+                    '<div style="color: green; font-weight: bold;">✅ Authorization successful! You can now use the MCP server.</div>';
+            } else if (urlParams.get('error')) {
+                document.getElementById('status').innerHTML = 
+                    '<div style="color: red; font-weight: bold;">❌ Authorization failed: ' + urlParams.get('error') + '</div>';
+            }
+        </script>
+    </body>
+    </html>
+    `;
+    
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+    
+  } catch (error) {
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'OAuth setup failed',
+      details: 'Make sure WORKDAY_CLIENT_ID, WORKDAY_CLIENT_SECRET, and WORKDAY_AUTH_ENDPOINT are configured'
+    });
+  }
+});
+
+// OAuth callback endpoint
+app.get('/oauth/callback', async (req: Request, res: Response) => {
+  try {
+    const { code, state, error } = req.query;
+    
+    if (error) {
+      return res.redirect(`/oauth/authorize?error=${encodeURIComponent(error as string)}`);
+    }
+    
+    if (!code || !state) {
+      return res.redirect('/oauth/authorize?error=Missing authorization code or state');
+    }
+    
+    const result = await oauthFlow.handleCallback(code as string, state as string);
+    
+    if (result.success) {
+      // Close popup and redirect parent
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Authorization Successful</title></head>
+        <body>
+            <h2>✅ Authorization Successful!</h2>
+            <p>You can now close this window.</p>
+            <script>
+                // Close popup window
+                if (window.opener) {
+                    window.opener.postMessage({type: 'oauth-success'}, '*');
+                    window.close();
+                } else {
+                    // Redirect to success page
+                    window.location.href = '/oauth/authorize?success=true';
+                }
+            </script>
+        </body>
+        </html>
+      `);
+    } else {
+      res.redirect(`/oauth/authorize?error=${encodeURIComponent(result.error || 'Unknown error')}`);
+    }
+    
+  } catch (error) {
+    console.error('OAuth callback error:', error);
+    res.redirect(`/oauth/authorize?error=${encodeURIComponent('OAuth callback failed')}`);
+  }
+});
+
 // Flowise-specific MCP tools endpoint
 app.get('/flowise/tools', (req: Request, res: Response) => {
   res.json({
@@ -516,11 +624,45 @@ app.post('/mcp', async (req: Request, res: Response) => {
                   tenant: authStatus.tenant,
                   base_url: authStatus.baseUrl,
                   has_required_config: authStatus.hasRequiredConfig,
+                  oauth_authorization_url: authStatus.isAuthenticated ? null : `https://mcp-workday-server.onrender.com/oauth/authorize`,
                   timestamp: new Date().toISOString()
                 }, null, 2)
               }
             ]
           };
+          break;
+        }
+
+        case 'authorize_workday_oauth': {
+          try {
+            const baseUrl = 'https://mcp-workday-server.onrender.com';
+            const { authUrl, state } = oauthFlow.generateAuthUrl(baseUrl);
+            
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    authorization_url: authUrl,
+                    instructions: "Visit the authorization URL to grant access to your Workday account",
+                    state_id: state,
+                    expires_in_minutes: 10,
+                    callback_url: `${baseUrl}/oauth/callback`,
+                    popup_url: `${baseUrl}/oauth/authorize`
+                  }, null, 2)
+                }
+              ]
+            };
+          } catch (error) {
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: `Error generating OAuth URL: ${error instanceof Error ? error.message : 'Unknown error'}`
+                }
+              ]
+            };
+          }
           break;
         }
         

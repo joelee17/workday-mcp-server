@@ -303,6 +303,14 @@ export const UTILITY_TOOLS = [
       properties: {},
     },
   },
+  {
+    name: 'authorize_workday_oauth',
+    description: 'Generate OAuth authorization URL for user authentication with Workday (opens popup window)',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 ];
 
 // Export all tools combined
