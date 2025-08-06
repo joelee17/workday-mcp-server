@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import https from 'https';
 import crypto from 'crypto';
@@ -452,7 +452,7 @@ app.use(cors());
 app.use(express.json());
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
@@ -462,7 +462,7 @@ app.get('/health', (req, res) => {
 });
 
 // MCP tools endpoint
-app.get('/mcp/tools', async (req, res) => {
+app.get('/mcp/tools', async (req: Request, res: Response) => {
   try {
     const tools = [
 
@@ -514,7 +514,7 @@ app.get('/mcp/tools', async (req, res) => {
 });
 
 // MCP tool execution endpoint
-app.post('/mcp/tools/:toolName', async (req, res) => {
+app.post('/mcp/tools/:toolName', async (req: Request, res: Response) => {
   try {
     const { toolName } = req.params;
     const { arguments: args } = req.body;
