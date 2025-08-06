@@ -495,6 +495,32 @@ app.get('/custom-tools', (req: Request, res: Response) => {
   });
 });
 
+// Debug endpoint to understand what Flowise is sending
+app.all('/debug', (req: Request, res: Response) => {
+  console.log('Debug request received:');
+  console.log('Method:', req.method);
+  console.log('Headers:', req.headers);
+  console.log('Body:', req.body);
+  console.log('Query:', req.query);
+  
+  res.json({
+    method: req.method,
+    headers: req.headers,
+    body: req.body,
+    query: req.query,
+    message: "This is a debug endpoint to understand Flowise requests",
+    availableEndpoints: [
+      '/mcp/tools',
+      '/flowise/tools', 
+      '/tools',
+      '/custom-tools',
+      '/functions',
+      '/mcp',
+      '/debug'
+    ]
+  });
+});
+
 // MCP capability endpoint for spec compliance
 app.get('/mcp/capabilities', (req: Request, res: Response) => {
   res.json({
