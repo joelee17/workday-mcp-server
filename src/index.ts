@@ -113,7 +113,7 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenData> {
     grant_type: 'refresh_token',
     refresh_token: refreshToken  // Using refresh token from workday.env file
   });
-  
+
   return new Promise((resolve, reject) => {
     const options = {
       hostname: new URL(WORKDAY_CONFIG.tokenEndpoint).hostname,
@@ -183,9 +183,9 @@ async function getValidAccessToken(): Promise<string> {
   
   // Check if we have a valid cached access token
   if (tokens && !isTokenExpired(tokens)) {
-    return tokens.access_token;
-  }
-  
+  return tokens.access_token;
+}
+
   try {
     // Exchange refresh token for access token
     const freshTokens = await refreshAccessToken(WORKDAY_CONFIG.refreshToken);
@@ -235,23 +235,23 @@ const STAFFING_TOOLS = [
   {
     name: 'list_workers',
     description: 'List workers from Workday Staffing API',
-    inputSchema: {
-      type: 'object',
-      properties: {
+        inputSchema: {
+          type: 'object',
+          properties: {
         limit: {
-          type: 'number',
+              type: 'number',
           description: 'Number of workers to list (default: 10)',
+            },
+          },
         },
       },
-    },
-  },
 
   // Job Change Operations
-  {
+      {
     name: 'initiate_job_change',
     description: 'Initiate a job change request for a worker',
-    inputSchema: {
-      type: 'object',
+        inputSchema: {
+          type: 'object',
       properties: {
         workerId: {
           type: 'string',
@@ -267,27 +267,27 @@ const STAFFING_TOOLS = [
         },
       },
       required: ['workerId'],
-    },
-  },
-  {
+        },
+      },
+      {
     name: 'get_job_change',
     description: 'Get job change information by ID',
-    inputSchema: {
-      type: 'object',
-      properties: {
+        inputSchema: {
+          type: 'object',
+          properties: {
         jobChangeId: {
           type: 'string',
           description: 'Job change ID',
         },
       },
       required: ['jobChangeId'],
-    },
-  },
-  {
+        },
+      },
+      {
     name: 'submit_job_change',
     description: 'Submit a job change request',
-    inputSchema: {
-      type: 'object',
+        inputSchema: {
+          type: 'object',
       properties: {
         jobChangeId: {
           type: 'string',
@@ -299,12 +299,12 @@ const STAFFING_TOOLS = [
   },
 
   // Job Management
-  {
+      {
     name: 'get_job_families',
     description: 'Get list of job families',
-    inputSchema: {
-      type: 'object',
-      properties: {
+        inputSchema: {
+          type: 'object',
+          properties: {
         limit: { type: 'number', description: 'Maximum number of results to return' },
         offset: { type: 'number', description: 'Number of results to skip' },
       },
@@ -319,30 +319,30 @@ const STAFFING_TOOLS = [
         limit: { type: 'number', description: 'Maximum number of results to return' },
         offset: { type: 'number', description: 'Number of results to skip' },
       },
-    },
-  },
-  {
+        },
+      },
+      {
     name: 'get_supervisory_organizations',
     description: 'Get list of supervisory organizations',
-    inputSchema: {
-      type: 'object',
-      properties: {
+        inputSchema: {
+          type: 'object',
+          properties: {
         limit: { type: 'number', description: 'Maximum number of results to return' },
         offset: { type: 'number', description: 'Number of results to skip' },
-      },
-    },
-  },
+            },
+          },
+        },
 ];
 
 const LEARNING_TOOLS = [
-  {
+      {
     name: 'enroll_in_learning_content',
     description: 'Enroll a worker in learning content using Workday Learning API',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workerId: {
-          type: 'string',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            workerId: {
+              type: 'string',
           description: 'Worker ID to enroll in learning content',
         },
         learningContentId: {
@@ -363,14 +363,14 @@ const LEARNING_TOOLS = [
         },
       },
       required: ['workerId', 'learningContentId'],
-    },
-  },
-  {
+        },
+      },
+      {
     name: 'get_learning_content',
     description: 'Get available learning content from Workday Learning API',
-    inputSchema: {
-      type: 'object',
-      properties: {
+        inputSchema: {
+          type: 'object',
+          properties: {
         limit: { type: 'number', description: 'Maximum number of results to return (optional)' },
         offset: { type: 'number', description: 'Number of results to skip (optional)' },
         searchTerm: { type: 'string', description: 'Search term to filter learning content (optional)' },
@@ -388,14 +388,14 @@ const LEARNING_TOOLS = [
         offset: { type: 'number', description: 'Number of results to skip (optional)' },
       },
       required: ['workerId'],
-    },
-  },
-  {
+        },
+      },
+      {
     name: 'get_worker_learning_progress',
     description: 'Get learning progress for a worker',
-    inputSchema: {
-      type: 'object',
-      properties: {
+        inputSchema: {
+          type: 'object',
+          properties: {
         workerId: { type: 'string', description: 'Worker ID' },
         learningContentId: { type: 'string', description: 'Specific learning content ID (optional)' },
       },
@@ -419,40 +419,40 @@ const LEARNING_TOOLS = [
 ];
 
 const PAYROLL_TOOLS = [
-  {
-    name: 'create_one_time_payment',
-    description: 'Create a one-time payroll input/payment for a worker in Workday',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workerId: {
-          type: 'string',
-          description: 'Worker ID in Workday system (e.g., "21001", "EMP001")',
-        },
-        payComponentId: {
-          type: 'string',
-          description: 'Pay Component ID for the payment type (e.g., "BONUS", "OVERTIME")',
-        },
-        startDate: {
-          type: 'string',
-          description: 'Start date for the payment in YYYY-MM-DD format',
-        },
-        endDate: {
-          type: 'string',
-          description: 'End date for the payment in YYYY-MM-DD format',
-        },
-        amount: {
-          type: 'number',
-          description: 'Payment amount (e.g., 1000.00)',
-        },
-        currency: {
-          type: 'string',
-          description: 'Currency code (optional, defaults to pay group currency)',
-        },
-        comment: {
-          type: 'string',
-          description: 'Optional comment for the payment',
-        },
+      {
+        name: 'create_one_time_payment',
+        description: 'Create a one-time payroll input/payment for a worker in Workday',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            workerId: {
+              type: 'string',
+              description: 'Worker ID in Workday system (e.g., "21001", "EMP001")',
+            },
+            payComponentId: {
+              type: 'string',
+              description: 'Pay Component ID for the payment type (e.g., "BONUS", "OVERTIME")',
+            },
+            startDate: {
+              type: 'string',
+              description: 'Start date for the payment in YYYY-MM-DD format',
+            },
+            endDate: {
+              type: 'string',
+              description: 'End date for the payment in YYYY-MM-DD format',
+            },
+            amount: {
+              type: 'number',
+              description: 'Payment amount (e.g., 1000.00)',
+            },
+            currency: {
+              type: 'string',
+              description: 'Currency code (optional, defaults to pay group currency)',
+            },
+            comment: {
+              type: 'string',
+              description: 'Optional comment for the payment',
+            },
       },
       required: ['workerId', 'payComponentId', 'startDate', 'endDate', 'amount'],
     },
@@ -467,7 +467,7 @@ const ACCOUNTS_PAYABLE_TOOLS = [
       type: 'object',
       properties: {
         company: { 
-          type: 'array', 
+              type: 'array',
           items: { type: 'string' },
           description: 'Company IDs for filtering (optional)' 
         },
@@ -765,7 +765,7 @@ const ASOR_TOOLS = [
         skills: {
           type: 'array',
           description: 'Array of skills that the agent can perform (required)',
-          items: {
+              items: {
             type: 'object',
             properties: {
               id: { type: 'string', description: 'Unique identifier for the skill' },
@@ -835,25 +835,25 @@ const HCM_AGENT_TOOLS = [
           description: 'Search query text',
         },
         intentNames: {
-          type: 'array',
+              type: 'array',
           description: 'Optional array of intent names to filter the search',
-          items: {
+              items: {
             type: 'string',
+              },
+            },
           },
+      required: ['text'],
         },
       },
-      required: ['text'],
-    },
-  },
-  {
+      {
     name: 'get_direct_reports',
     description: 'Get information about your direct reports',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
     name: 'get_direct_reports_learnings',
     description: 'Get learning information about your direct reports',
     inputSchema: {
@@ -904,9 +904,9 @@ const HCM_AGENT_TOOLS = [
   {
     name: 'get_my_calendar_information',
     description: 'Get your important calendar dates including learning, time off, and holidays',
-    inputSchema: {
-      type: 'object',
-      properties: {
+        inputSchema: {
+          type: 'object',
+          properties: {
         monthsFromNow: {
           type: 'integer',
           description: 'Number of months from now to retrieve calendar information (default: 6)',
@@ -921,7 +921,7 @@ const HCM_AGENT_TOOLS = [
       type: 'object',
       properties: {
         asOfDate: {
-          type: 'string',
+              type: 'string',
           description: 'Date to get balances as of (ISO datetime format, optional)',
         },
       },
@@ -934,24 +934,24 @@ const HCM_AGENT_TOOLS = [
       type: 'object',
       properties: {
         nameSearch: {
-          type: 'string',
+              type: 'string',
           description: 'Name to search for (e.g., "John Smith", "Smith", "John")',
+            },
+          },
+      required: ['nameSearch'],
         },
       },
-      required: ['nameSearch'],
-    },
-  },
 ];
 
 const UTILITY_TOOLS = [
-  {
-    name: 'check_workday_auth_status',
+      {
+        name: 'check_workday_auth_status',
     description: 'Check current authentication status with Workday',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
 ];
 
 // List available tools - organized by service
@@ -997,22 +997,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
 
     // STAFFING API TOOLS
-    switch (name) {
+  switch (name) {
       case 'get_workday_worker': {
         const { workerId } = args as { workerId: string };
         const result = await staffingApi.getStaffingWorker(config, workerId);
-        return {
+      return {
           content: [{
             type: 'text',
             text: `📋 Worker Information (ID: ${workerId})\n\n${JSON.stringify(result, null, 2)}`
           }],
-        };
-      }
+      };
+    }
 
       case 'search_workday_workers': {
         const { searchTerm } = args as { searchTerm: string };
         const result = await staffingApi.searchStaffingWorkers(config, searchTerm, 10);
-        return {
+      return {
           content: [{
             type: 'text',
             text: `🔍 Workers Search Results for "${searchTerm}"\n\n${JSON.stringify(result, null, 2)}`
@@ -1023,7 +1023,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'list_workers': {
         const { limit = 10 } = args as { limit?: number };
         const result = await staffingApi.getStaffingWorkers(config, limit);
-        return {
+      return {
           content: [{
             type: 'text',
             text: `📋 Workers List (Limit: ${limit})\n\n${JSON.stringify(result, null, 2)}`
@@ -1038,7 +1038,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           reason: reason || 'General Job Change'
         };
         const result = await staffingApi.initiateJobChange(config, workerId, payload);
-        return {
+      return {
           content: [{
             type: 'text',
             text: `📝 Job Change Initiated for Worker ${workerId}\n\n${JSON.stringify(result, null, 2)}`
@@ -1049,7 +1049,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'get_job_change': {
         const { jobChangeId } = args as { jobChangeId: string };
         const result = await staffingApi.getJobChange(config, jobChangeId);
-        return {
+      return {
           content: [{
             type: 'text',
             text: `📋 Job Change Information (ID: ${jobChangeId})\n\n${JSON.stringify(result, null, 2)}`
@@ -1073,7 +1073,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await staffingApi.getJobFamilies(config, limit, offset);
         return {
           content: [{
-            type: 'text',
+              type: 'text',
             text: `📋 Job Families\n\n${JSON.stringify(result, null, 2)}`
           }],
         };
@@ -1113,7 +1113,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await learningApi.enrollInLearningContent(config, enrollmentData);
         return {
           content: [{
-            type: 'text',
+              type: 'text',
             text: `📚 Learning Enrollment Created\n\n${JSON.stringify(result, null, 2)}`
           }],
         };
@@ -1144,9 +1144,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'get_worker_learning_progress': {
         const { workerId, learningContentId } = args as { workerId: string; learningContentId?: string };
         const result = await learningApi.getWorkerLearningProgress(config, workerId, learningContentId);
-        return {
+          return {
           content: [{
-            type: 'text',
+                type: 'text',
             text: `📊 Learning Progress for Worker ${workerId}\n\n${JSON.stringify(result, null, 2)}`
           }],
         };
@@ -1165,9 +1165,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           provider,
           limit
         });
-        return {
+          return {
           content: [{
-            type: 'text',
+                type: 'text',
             text: `🔍 Learning Content Search Results for "${searchTerm}"\n\n${JSON.stringify(result, null, 2)}`
           }],
         };
@@ -1228,14 +1228,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 if (res.statusCode === 200 || res.statusCode === 201) {
                   resolve({
                     content: [{
-                      type: 'text',
+              type: 'text',
                       text: `💰 One-Time Payment Created\n\n${JSON.stringify(response, null, 2)}`
                     }],
                   });
                 } else {
                   reject(new Error(`Payroll API error (${res.statusCode}): ${response.error || data}`));
                 }
-              } catch (error) {
+      } catch (error) {
                 reject(new Error(`Failed to parse payroll response: ${error instanceof Error ? error.message : 'Unknown error'}`));
               }
             });
@@ -1268,7 +1268,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await accountsPayableApi.getSupplierInvoiceRequests(config, params);
         return {
           content: [{
-            type: 'text',
+              type: 'text',
             text: `📋 Supplier Invoice Requests\n\n${JSON.stringify(result, null, 2)}`
           }],
         };
@@ -1279,7 +1279,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await accountsPayableApi.getSupplierInvoiceRequest(config, invoiceId);
         return {
           content: [{
-            type: 'text',
+              type: 'text',
             text: `📄 Supplier Invoice Request Details\n\n${JSON.stringify(result, null, 2)}`
           }],
         };
@@ -1397,7 +1397,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await accountsPayableApi.getSupplierInvoiceRequestAttachment(config, invoiceId, attachmentId);
         return {
           content: [{
-            type: 'text',
+              type: 'text',
             text: `📎 Supplier Invoice Request Attachment Details\n\n${JSON.stringify(result, null, 2)}`
           }],
         };
@@ -1439,9 +1439,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // ASOR API TOOLS
       case 'get_agent_definitions': {
         const result = await asorApi.getAgentDefinitions(config);
-        return {
+            return {
           content: [{
-            type: 'text',
+                  type: 'text',
             text: `🤖 Agent Definitions\n\n${JSON.stringify(result, null, 2)}`
           }],
         };
@@ -1498,9 +1498,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'get_direct_reports': {
         const result = await hcmAgentApi.getDirectReports(config);
-        return {
+            return {
           content: [{
-            type: 'text',
+                  type: 'text',
             text: `👥 Direct Reports Information\n\n${JSON.stringify(result, null, 2)}`
           }],
         };
@@ -1550,7 +1550,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await hcmAgentApi.getMyPayslipInformation(config);
         return {
           content: [{
-            type: 'text',
+              type: 'text',
             text: `💰 My Payslip Information\n\n${JSON.stringify(result, null, 2)}`
           }],
         };
@@ -1580,7 +1580,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'get_my_time_off_balances': {
         const { asOfDate } = args as { asOfDate?: string };
         const result = await hcmAgentApi.getMyTimeOffBalances(config, asOfDate);
-        return {
+  return {
           content: [{
             type: 'text',
             text: `🏖️ My Time Off Balances\n\n${JSON.stringify(result, null, 2)}`
@@ -1591,7 +1591,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'lookup_coworker': {
         const { nameSearch } = args as { nameSearch: string };
         const result = await hcmAgentApi.lookupCoworker(config, nameSearch);
-        return {
+      return {
           content: [{
             type: 'text',
             text: `👔 Coworker Lookup Results for "${nameSearch}"\n\n${JSON.stringify(result, null, 2)}`
@@ -1602,7 +1602,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // UTILITY TOOLS
       case 'check_workday_auth_status': {
         const currentTokens = loadTokens();
-        return {
+      return {
           content: [{
             type: 'text',
             text: JSON.stringify({
@@ -1623,7 +1623,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      default:
+    default:
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
