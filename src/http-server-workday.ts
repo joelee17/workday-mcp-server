@@ -461,20 +461,30 @@ app.get('/mcp/tools', async (req: Request, res: Response) => {
   }
 });
 
-// SSE endpoint for Flowise compatibility
+// SSE endpoint for Flowise compatibility with proper MCP protocol
 app.get('/mcp/sse', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
   
-  // Send initial connection event with tools
-  res.write('event: tools\n');
-  res.write('data: ' + JSON.stringify({ tools: ALL_TOOLS }) + '\n\n');
+  // Send proper MCP protocol initialization
+  res.write('event: message\n');
+  res.write('data: ' + JSON.stringify({
+    jsonrpc: "2.0",
+    method: "notifications/initialized",
+    params: {}
+  }) + '\n\n');
   
-  // Send completion event and close for one-shot clients
-  res.write('event: complete\n');
-  res.write('data: {"status":"ready","toolCount":' + ALL_TOOLS.length + '}\n\n');
+  // Send MCP tools list response
+  res.write('event: message\n');
+  res.write('data: ' + JSON.stringify({
+    jsonrpc: "2.0",
+    method: "tools/list",
+    result: {
+      tools: ALL_TOOLS
+    }
+  }) + '\n\n');
   
   // Close connection after initial data for one-shot mode
   const closeParam = req.query.close;
@@ -483,10 +493,14 @@ app.get('/mcp/sse', (req: Request, res: Response) => {
     return;
   }
   
-  // Keep connection alive for streaming mode
+  // Keep connection alive with proper MCP heartbeat
   const keepAlive = setInterval(() => {
-    res.write('event: ping\n');
-    res.write('data: {"type":"ping","timestamp":"' + new Date().toISOString() + '"}\n\n');
+    res.write('event: message\n');
+    res.write('data: ' + JSON.stringify({
+      jsonrpc: "2.0",
+      method: "notifications/ping",
+      params: { timestamp: new Date().toISOString() }
+    }) + '\n\n');
   }, 30000);
   
   req.on('close', () => {
