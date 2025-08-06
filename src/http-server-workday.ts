@@ -418,6 +418,39 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// Flowise-specific MCP tools endpoint
+app.get('/flowise/tools', (req: Request, res: Response) => {
+  res.json({
+    actions: ALL_TOOLS.map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.inputSchema,
+      type: "function"
+    }))
+  });
+});
+
+// Alternative Flowise format
+app.get('/flowise/actions', (req: Request, res: Response) => {
+  res.json(ALL_TOOLS.map(tool => ({
+    name: tool.name,
+    description: tool.description,
+    schema: tool.inputSchema,
+    function: tool.name
+  })));
+});
+
+// OpenAI-style functions format (another Flowise possibility)
+app.get('/functions', (req: Request, res: Response) => {
+  res.json({
+    functions: ALL_TOOLS.map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.inputSchema
+    }))
+  });
+});
+
 // MCP capability endpoint for spec compliance
 app.get('/mcp/capabilities', (req: Request, res: Response) => {
   res.json({
@@ -461,23 +494,31 @@ app.get('/mcp/tools', async (req: Request, res: Response) => {
   }
 });
 
-// SSE endpoint for Flowise compatibility with proper MCP protocol
+// MCP-compliant SSE endpoint (simplified for better compatibility)
 app.get('/mcp/sse', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
   
-  // Send proper MCP protocol initialization
-  res.write('event: message\n');
+  // Send server capabilities first
   res.write('data: ' + JSON.stringify({
     jsonrpc: "2.0",
-    method: "notifications/initialized",
-    params: {}
+    method: "initialize",
+    result: {
+      protocolVersion: "2024-11-05",
+      capabilities: {
+        tools: {}
+      },
+      serverInfo: {
+        name: "mcp-workday-server",
+        version: "1.0.0"
+      }
+    }
   }) + '\n\n');
   
-  // Send MCP tools list response
-  res.write('event: message\n');
+  // Send tools list  
   res.write('data: ' + JSON.stringify({
     jsonrpc: "2.0",
     method: "tools/list",
@@ -486,32 +527,18 @@ app.get('/mcp/sse', (req: Request, res: Response) => {
     }
   }) + '\n\n');
   
-  // Close connection after initial data for one-shot mode
+  // Close immediately for one-shot clients (which most MCP clients expect)
   const closeParam = req.query.close;
   if (closeParam === 'true' || closeParam === '1') {
     res.end();
     return;
   }
   
-  // Keep connection alive with proper MCP heartbeat
-  const keepAlive = setInterval(() => {
-    res.write('event: message\n');
-    res.write('data: ' + JSON.stringify({
-      jsonrpc: "2.0",
-      method: "notifications/ping",
-      params: { timestamp: new Date().toISOString() }
-    }) + '\n\n');
-  }, 30000);
-  
-  req.on('close', () => {
-    clearInterval(keepAlive);
-  });
-  
-  // Auto-close after 5 minutes for non-streaming clients
+  // For persistent connections, close after sending initial data
+  // Most MCP clients expect the server to close after providing tools
   setTimeout(() => {
-    clearInterval(keepAlive);
     res.end();
-  }, 300000);
+  }, 1000);
 });
 
 // MCP tool execution endpoint
