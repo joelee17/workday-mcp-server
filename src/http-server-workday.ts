@@ -451,20 +451,60 @@ app.get('/functions', (req: Request, res: Response) => {
   });
 });
 
-// Flowise MCP Server format (exact format from search results)
-app.get('/mcp', (req: Request, res: Response) => {
-  res.json({
-    mcpServers: {
-      "workday-mcp-server": {
-        command: "mcp-proxy",
-        args: ["https://mcp-workday-server.onrender.com/mcp/sse"],
-        env: {},
-        tools: ALL_TOOLS.map(tool => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema
-        }))
+// MCP Streamable HTTP endpoint (for Flowise compatibility)
+app.post('/mcp', (req: Request, res: Response) => {
+  const { method, params } = req.body;
+  
+  if (method === 'tools/list') {
+    return res.json({
+      jsonrpc: "2.0",
+      id: req.body.id,
+      result: {
+        tools: ALL_TOOLS
       }
+    });
+  }
+  
+  if (method === 'initialize') {
+    return res.json({
+      jsonrpc: "2.0", 
+      id: req.body.id,
+      result: {
+        protocolVersion: "2024-11-05",
+        capabilities: {
+          tools: {}
+        },
+        serverInfo: {
+          name: "workday-mcp-server",
+          version: "1.0.0"
+        }
+      }
+    });
+  }
+  
+  // Handle tool execution
+  if (method === 'tools/call') {
+    return res.json({
+      jsonrpc: "2.0",
+      id: req.body.id, 
+      result: {
+        content: [
+          {
+            type: "text",
+            text: `Tool ${params?.name} executed successfully. This is a demo response.`
+          }
+        ]
+      }
+    });
+  }
+  
+  // Default response
+  res.json({
+    jsonrpc: "2.0",
+    id: req.body.id,
+    error: {
+      code: -32601,
+      message: "Method not found"
     }
   });
 });
