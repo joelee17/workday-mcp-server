@@ -620,11 +620,18 @@ app.post('/mcp', async (req: Request, res: Response) => {
                 text: JSON.stringify({
                   authentication_status: authStatus.isAuthenticated ? 'authenticated' : 'not_authenticated',
                   token_type: authStatus.tokenType,
+                  token_source: authStatus.tokenSource,
                   expires_at: authStatus.expiresAt,
                   tenant: authStatus.tenant,
                   base_url: authStatus.baseUrl,
                   has_required_config: authStatus.hasRequiredConfig,
                   oauth_authorization_url: authStatus.isAuthenticated ? null : `https://mcp-workday-server.onrender.com/oauth/authorize`,
+                  environment_variables: {
+                    workday_access_token: process.env.WORKDAY_ACCESS_TOKEN ? '✅ Set' : '❌ Not set',
+                    workday_bearer_token: process.env.WORKDAY_BEARER_TOKEN ? '✅ Set' : '❌ Not set',
+                    workday_client_id: process.env.WORKDAY_CLIENT_ID ? '✅ Set' : '❌ Not set',
+                    workday_client_secret: process.env.WORKDAY_CLIENT_SECRET ? '✅ Set' : '❌ Not set'
+                  },
                   timestamp: new Date().toISOString()
                 }, null, 2)
               }

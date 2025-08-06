@@ -18,6 +18,7 @@ interface WorkdayAuthConfig {
   tenant: string;
   redirectUri: string;
   bearerToken?: string;
+  accessToken?: string;
 }
 
 class WorkdayAuth {
@@ -33,7 +34,8 @@ class WorkdayAuth {
       baseUrl: process.env.WORKDAY_BASE_URL || '',
       tenant: process.env.WORKDAY_TENANT || '',
       redirectUri: process.env.WORKDAY_REDIRECT_URI || '',
-      bearerToken: process.env.WORKDAY_BEARER_TOKEN
+      bearerToken: process.env.WORKDAY_BEARER_TOKEN,
+      accessToken: process.env.WORKDAY_ACCESS_TOKEN
     };
   }
 
@@ -41,8 +43,17 @@ class WorkdayAuth {
    * Get a valid access token (retrieves new one if expired)
    */
   async getAccessToken(): Promise<string> {
+    // Priority order: WORKDAY_ACCESS_TOKEN > WORKDAY_BEARER_TOKEN > OAuth flow
+    
+    // If we have a pre-configured access token, use it (highest priority)
+    if (this.config.accessToken) {
+      console.log('✅ Using WORKDAY_ACCESS_TOKEN environment variable');
+      return this.config.accessToken;
+    }
+    
     // If we have a pre-configured bearer token, use it
     if (this.config.bearerToken) {
+      console.log('✅ Using WORKDAY_BEARER_TOKEN environment variable');
       return this.config.bearerToken;
     }
 
@@ -51,7 +62,7 @@ class WorkdayAuth {
       return this.accessToken;
     }
 
-    // Get a new token
+    // Get a new token via OAuth
     return await this.refreshAccessToken();
   }
 
@@ -107,19 +118,18 @@ class WorkdayAuth {
    */
   async checkAuthStatus(): Promise<{
     isAuthenticated: boolean;
-    tokenType: 'bearer' | 'oauth';
+    tokenType: 'access_token' | 'bearer' | 'oauth';
     expiresAt?: string;
     tenant: string;
     baseUrl: string;
     hasRequiredConfig: boolean;
+    tokenSource: string;
   }> {
-    const hasRequiredConfig = !!(
-      this.config.clientId || this.config.bearerToken
-    ) && !!(
-      this.config.clientSecret || this.config.bearerToken
-    ) && !!(
-      this.config.tokenEndpoint || this.config.bearerToken
-    );
+    // Check if we have any form of authentication configured
+    const hasAccessToken = !!this.config.accessToken;
+    const hasBearerToken = !!this.config.bearerToken;
+    const hasOAuthConfig = !!(this.config.clientId && this.config.clientSecret && this.config.tokenEndpoint);
+    const hasRequiredConfig = hasAccessToken || hasBearerToken || hasOAuthConfig;
 
     if (!hasRequiredConfig) {
       return {
@@ -127,19 +137,35 @@ class WorkdayAuth {
         tokenType: 'oauth',
         tenant: this.config.tenant,
         baseUrl: this.config.baseUrl,
-        hasRequiredConfig: false
+        hasRequiredConfig: false,
+        tokenSource: 'none'
       };
     }
 
     try {
       const token = await this.getAccessToken();
+      let tokenType: 'access_token' | 'bearer' | 'oauth';
+      let tokenSource: string;
+      
+      if (this.config.accessToken) {
+        tokenType = 'access_token';
+        tokenSource = 'WORKDAY_ACCESS_TOKEN environment variable';
+      } else if (this.config.bearerToken) {
+        tokenType = 'bearer';
+        tokenSource = 'WORKDAY_BEARER_TOKEN environment variable';
+      } else {
+        tokenType = 'oauth';
+        tokenSource = 'OAuth Client Credentials flow';
+      }
+      
       return {
         isAuthenticated: !!token,
-        tokenType: this.config.bearerToken ? 'bearer' : 'oauth',
+        tokenType,
         expiresAt: this.tokenExpiry?.toISOString(),
         tenant: this.config.tenant,
         baseUrl: this.config.baseUrl,
-        hasRequiredConfig: true
+        hasRequiredConfig: true,
+        tokenSource
       };
     } catch (error) {
       console.error('Authentication check failed:', error);
@@ -148,7 +174,8 @@ class WorkdayAuth {
         tokenType: 'oauth',
         tenant: this.config.tenant,
         baseUrl: this.config.baseUrl,
-        hasRequiredConfig: true
+        hasRequiredConfig: true,
+        tokenSource: 'authentication_failed'
       };
     }
   }
