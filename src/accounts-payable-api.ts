@@ -1,5 +1,4 @@
 import * as https from 'https';
-import { IncomingMessage } from 'http';
 
 interface WorkdayConfig {
   baseUrl: string;
@@ -10,9 +9,9 @@ interface WorkdayConfig {
 // Helper function to make HTTP requests
 function makeHttpRequest(options: any, body?: string): Promise<any> {
   return new Promise((resolve, reject) => {
-    const req = https.request(options, (res: IncomingMessage) => {
+    const req = https.request(options, (res) => {
       let data = '';
-      res.on('data', (chunk: any) => data += chunk);
+      res.on('data', (chunk) => data += chunk);
       res.on('end', () => {
         try {
           const response = res.statusCode === 204 ? {} : JSON.parse(data);
@@ -27,7 +26,7 @@ function makeHttpRequest(options: any, body?: string): Promise<any> {
       });
     });
 
-    req.on('error', (error: Error) => {
+    req.on('error', (error) => {
       reject(new Error(`Request error: ${error.message}`));
     });
 
