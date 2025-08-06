@@ -13,6 +13,7 @@ import https from 'https';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { workdayAuth } from './workday-auth.js';
 import * as staffingApi from './staffing-api.js';
 // SOAP API removed - using REST API only
 import * as learningApi from './learning-api.js';
@@ -452,7 +453,7 @@ app.get('/functions', (req: Request, res: Response) => {
 });
 
 // MCP Streamable HTTP endpoint (for Flowise compatibility)
-app.post('/mcp', (req: Request, res: Response) => {
+app.post('/mcp', async (req: Request, res: Response) => {
   console.log('MCP Request:', JSON.stringify(req.body, null, 2));
   
   const { method, params } = req.body;
@@ -495,18 +496,100 @@ app.post('/mcp', (req: Request, res: Response) => {
   
   // Handle tool execution
   if (method === 'tools/call') {
-    return res.json({
-      jsonrpc: "2.0",
-      id: req.body.id, 
-      result: {
-        content: [
-          {
-            type: "text",
-            text: `Tool ${params?.name} executed successfully. This is a demo response from Workday MCP server.`
+    const toolName = params?.name;
+    const toolArgs = params?.arguments || {};
+    
+    try {
+      let result;
+      
+      switch (toolName) {
+        case 'check_workday_auth_status': {
+          const authStatus = await workdayAuth.checkAuthStatus();
+          result = {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  authentication_status: authStatus.isAuthenticated ? 'authenticated' : 'not_authenticated',
+                  token_type: authStatus.tokenType,
+                  expires_at: authStatus.expiresAt,
+                  tenant: authStatus.tenant,
+                  base_url: authStatus.baseUrl,
+                  has_required_config: authStatus.hasRequiredConfig,
+                  timestamp: new Date().toISOString()
+                }, null, 2)
+              }
+            ]
+          };
+          break;
+        }
+        
+        case 'get_workday_worker': {
+          // Example of authenticated API call
+          const workerId = toolArgs.workerId;
+          if (!workerId) {
+            throw new Error('Worker ID is required');
           }
-        ]
+          
+          try {
+            const authStatus = await workdayAuth.checkAuthStatus();
+            if (!authStatus.isAuthenticated) {
+              throw new Error('Not authenticated with Workday. Please configure OAuth credentials.');
+            }
+            
+            // Make authenticated request to get worker info
+            const response = await workdayAuth.makeAuthenticatedRequest(`workers/${workerId}`);
+            const workerData = await response.json();
+            
+            result = {
+              content: [
+                {
+                  type: "text", 
+                  text: JSON.stringify(workerData, null, 2)
+                }
+              ]
+            };
+          } catch (error) {
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: `Error retrieving worker ${workerId}: ${error instanceof Error ? error.message : 'Unknown error'}`
+                }
+              ]
+            };
+          }
+          break;
+        }
+        
+        default: {
+          result = {
+            content: [
+              {
+                type: "text",
+                text: `Tool ${toolName} executed successfully. This is a demo response from Workday MCP server.`
+              }
+            ]
+          };
+        }
       }
-    });
+      
+      return res.json({
+        jsonrpc: "2.0",
+        id: req.body.id,
+        result
+      });
+      
+    } catch (error) {
+      return res.json({
+        jsonrpc: "2.0",
+        id: req.body.id,
+        error: {
+          code: -32603,
+          message: `Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
+      });
+    }
   }
   
   // Handle ping
