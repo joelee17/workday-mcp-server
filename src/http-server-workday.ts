@@ -453,6 +453,8 @@ app.get('/functions', (req: Request, res: Response) => {
 
 // MCP Streamable HTTP endpoint (for Flowise compatibility)
 app.post('/mcp', (req: Request, res: Response) => {
+  console.log('MCP Request:', JSON.stringify(req.body, null, 2));
+  
   const { method, params } = req.body;
   
   if (method === 'tools/list') {
@@ -472,7 +474,10 @@ app.post('/mcp', (req: Request, res: Response) => {
       result: {
         protocolVersion: "2024-11-05",
         capabilities: {
-          tools: {}
+          tools: {},
+          resources: {},
+          prompts: {},
+          logging: {}
         },
         serverInfo: {
           name: "workday-mcp-server",
@@ -480,6 +485,12 @@ app.post('/mcp', (req: Request, res: Response) => {
         }
       }
     });
+  }
+  
+  // Handle notifications/initialized
+  if (method === 'notifications/initialized') {
+    // For notifications, don't send a response
+    return res.status(204).send();
   }
   
   // Handle tool execution
@@ -491,12 +502,23 @@ app.post('/mcp', (req: Request, res: Response) => {
         content: [
           {
             type: "text",
-            text: `Tool ${params?.name} executed successfully. This is a demo response.`
+            text: `Tool ${params?.name} executed successfully. This is a demo response from Workday MCP server.`
           }
         ]
       }
     });
   }
+  
+  // Handle ping
+  if (method === 'ping') {
+    return res.json({
+      jsonrpc: "2.0",
+      id: req.body.id,
+      result: {}
+    });
+  }
+  
+  console.log('Unknown method:', method);
   
   // Default response
   res.json({
@@ -504,8 +526,21 @@ app.post('/mcp', (req: Request, res: Response) => {
     id: req.body.id,
     error: {
       code: -32601,
-      message: "Method not found"
+      message: `Method not found: ${method}`
     }
+  });
+});
+
+// Add GET endpoint for basic MCP info (some clients might check this first)
+app.get('/mcp', (req: Request, res: Response) => {
+  res.json({
+    name: "workday-mcp-server",
+    version: "1.0.0",
+    description: "Workday MCP Server with comprehensive API tools",
+    protocol: "mcp",
+    transport: "streamable-http",
+    toolCount: ALL_TOOLS.length,
+    tools: ALL_TOOLS.map(t => t.name)
   });
 });
 
@@ -558,6 +593,48 @@ app.all('/debug', (req: Request, res: Response) => {
       '/mcp',
       '/debug'
     ]
+  });
+});
+
+// Alternative MCP endpoint that might match GitHub pattern better
+app.all('/mcp/', (req: Request, res: Response) => {
+  console.log('MCP/ Request:', req.method, JSON.stringify(req.body, null, 2));
+  
+  if (req.method === 'GET') {
+    return res.json({
+      name: "workday-mcp-server",
+      version: "1.0.0", 
+      transport: "streamable-http",
+      tools: ALL_TOOLS.map(t => t.name)
+    });
+  }
+  
+  const { method, params } = req.body;
+  
+  if (method === 'tools/list') {
+    return res.json({
+      jsonrpc: "2.0",
+      id: req.body.id,
+      result: { tools: ALL_TOOLS }
+    });
+  }
+  
+  if (method === 'initialize') {
+    return res.json({
+      jsonrpc: "2.0",
+      id: req.body.id,
+      result: {
+        protocolVersion: "2024-11-05",
+        capabilities: { tools: {}, resources: {}, prompts: {} },
+        serverInfo: { name: "workday-mcp-server", version: "1.0.0" }
+      }
+    });
+  }
+  
+  res.json({
+    jsonrpc: "2.0", 
+    id: req.body.id,
+    error: { code: -32601, message: `Method not found: ${method}` }
   });
 });
 
