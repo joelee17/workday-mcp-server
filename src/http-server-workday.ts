@@ -418,6 +418,23 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// MCP capability endpoint for spec compliance
+app.get('/mcp/capabilities', (req: Request, res: Response) => {
+  res.json({
+    protocolVersion: "2024-11-05",
+    capabilities: {
+      tools: {},
+      prompts: {},
+      resources: {},
+      logging: {}
+    },
+    serverInfo: {
+      name: "mcp-workday-server",
+      version: "1.0.0"
+    }
+  });
+});
+
 // MCP tools endpoint
 app.get('/mcp/tools', async (req: Request, res: Response) => {
   try {
@@ -425,6 +442,28 @@ app.get('/mcp/tools', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
+});
+
+// SSE endpoint for Flowise compatibility
+app.get('/mcp/sse', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  
+  // Send initial connection event
+  res.write('event: connected\n');
+  res.write('data: {"status":"connected","tools":' + JSON.stringify(ALL_TOOLS) + '}\n\n');
+  
+  // Keep connection alive
+  const keepAlive = setInterval(() => {
+    res.write('event: ping\n');
+    res.write('data: {"type":"ping"}\n\n');
+  }, 30000);
+  
+  req.on('close', () => {
+    clearInterval(keepAlive);
+  });
 });
 
 // MCP tool execution endpoint
