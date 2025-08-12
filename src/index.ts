@@ -35,7 +35,7 @@ import * as staffingApi from './staffing-api.js';
 import * as learningApi from './learning-api.js';
 import * as accountsPayableApi from './accounts-payable-api.js';
 import * as asorApi from './asor-api.js';
-import * as hcmAgentApi from './hcm-agent-api.js';
+// hcmAgentApi import removed - AWS endpoints no longer needed
 
 // Create server instance
 const server = new Server(
@@ -823,125 +823,7 @@ const ASOR_TOOLS = [
   },
 ];
 
-const HCM_AGENT_TOOLS = [
-  {
-    name: 'search_workday_agent',
-    description: 'Search through Workday using the HCM Agent API, including features, knowledge base articles, etc.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        text: {
-          type: 'string',
-          description: 'Search query text',
-        },
-        intentNames: {
-              type: 'array',
-          description: 'Optional array of intent names to filter the search',
-              items: {
-            type: 'string',
-              },
-            },
-          },
-      required: ['text'],
-        },
-      },
-      {
-    name: 'get_direct_reports',
-    description: 'Get information about your direct reports',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-    name: 'get_direct_reports_learnings',
-    description: 'Get learning information about your direct reports',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'get_direct_reports_career',
-    description: 'Get career information about your direct reports including goals, feedback and skills',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'get_my_information',
-    description: 'Get your personal information from Workday',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'get_my_inbox_tasks',
-    description: 'Get your inbox tasks from Workday',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'get_my_payslip_information',
-    description: 'Get your payslip information from Workday',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'get_my_career_information',
-    description: 'Get your career information from Workday',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'get_my_calendar_information',
-    description: 'Get your important calendar dates including learning, time off, and holidays',
-        inputSchema: {
-          type: 'object',
-          properties: {
-        monthsFromNow: {
-          type: 'integer',
-          description: 'Number of months from now to retrieve calendar information (default: 6)',
-        },
-      },
-    },
-  },
-  {
-    name: 'get_my_time_off_balances',
-    description: 'Get your time off balances from Workday',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        asOfDate: {
-              type: 'string',
-          description: 'Date to get balances as of (ISO datetime format, optional)',
-        },
-      },
-    },
-  },
-  {
-    name: 'lookup_coworker',
-    description: 'Look up information about coworkers by name',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        nameSearch: {
-              type: 'string',
-          description: 'Name to search for (e.g., "John Smith", "Smith", "John")',
-            },
-          },
-      required: ['nameSearch'],
-        },
-      },
-];
+// HCM_AGENT_TOOLS removed - AWS endpoints no longer needed
 
 const UTILITY_TOOLS = [
       {
@@ -973,8 +855,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // ASOR API Tools
       ...ASOR_TOOLS,
       
-      // HCM Agent API Tools
-      ...HCM_AGENT_TOOLS,
+      // HCM Agent API Tools removed - AWS endpoints no longer needed
       
       // Utility Tools
       ...UTILITY_TOOLS,
@@ -1483,121 +1364,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      // HCM AGENT API TOOLS
-      case 'search_workday_agent': {
-        const { text, intentNames } = args as { text: string; intentNames?: string[] };
-        const query = { text, ...(intentNames && { intentNames }) };
-        const result = await hcmAgentApi.searchAgent(config, query);
-        return {
-          content: [{
-            type: 'text',
-            text: `🔍 Workday Agent Search Results for "${text}"\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
-
-      case 'get_direct_reports': {
-        const result = await hcmAgentApi.getDirectReports(config);
-            return {
-          content: [{
-                  type: 'text',
-            text: `👥 Direct Reports Information\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
-
-      case 'get_direct_reports_learnings': {
-        const result = await hcmAgentApi.getDirectReportsLearnings(config);
-        return {
-          content: [{
-            type: 'text',
-            text: `📚 Direct Reports Learning Information\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
-
-      case 'get_direct_reports_career': {
-        const result = await hcmAgentApi.getDirectReportsCareer(config);
-        return {
-          content: [{
-            type: 'text',
-            text: `🎯 Direct Reports Career Information\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
-
-      case 'get_my_information': {
-        const result = await hcmAgentApi.getMyInformation(config);
-        return {
-          content: [{
-            type: 'text',
-            text: `👤 My Information\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
-
-      case 'get_my_inbox_tasks': {
-        const result = await hcmAgentApi.getMyInboxTasks(config);
-        return {
-          content: [{
-            type: 'text',
-            text: `📥 My Inbox Tasks\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
-
-      case 'get_my_payslip_information': {
-        const result = await hcmAgentApi.getMyPayslipInformation(config);
-        return {
-          content: [{
-              type: 'text',
-            text: `💰 My Payslip Information\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
-
-      case 'get_my_career_information': {
-        const result = await hcmAgentApi.getMyCareerInformation(config);
-        return {
-          content: [{
-            type: 'text',
-            text: `📈 My Career Information\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
-
-      case 'get_my_calendar_information': {
-        const { monthsFromNow } = args as { monthsFromNow?: number };
-        const result = await hcmAgentApi.getMyCalendarInformation(config, monthsFromNow);
-        return {
-          content: [{
-            type: 'text',
-            text: `📅 My Calendar Information\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
-
-      case 'get_my_time_off_balances': {
-        const { asOfDate } = args as { asOfDate?: string };
-        const result = await hcmAgentApi.getMyTimeOffBalances(config, asOfDate);
-  return {
-          content: [{
-            type: 'text',
-            text: `🏖️ My Time Off Balances\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
-
-      case 'lookup_coworker': {
-        const { nameSearch } = args as { nameSearch: string };
-        const result = await hcmAgentApi.lookupCoworker(config, nameSearch);
-      return {
-          content: [{
-            type: 'text',
-            text: `👔 Coworker Lookup Results for "${nameSearch}"\n\n${JSON.stringify(result, null, 2)}`
-          }],
-        };
-      }
+      // HCM AGENT API TOOLS removed - AWS endpoints no longer needed
 
       // UTILITY TOOLS
       case 'check_workday_auth_status': {

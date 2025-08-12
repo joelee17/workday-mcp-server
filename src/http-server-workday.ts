@@ -10,9 +10,14 @@ import {
 import express from 'express';
 import cors from 'cors';
 import https from 'https';
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import * as staffingApi from './staffing-api.js';
-// SOAP API removed - using REST API only
 import * as learningApi from './learning-api.js';
+import * as accountsPayableApi from './accounts-payable-api.js';
+import * as asorApi from './asor-api.js';
+// hcmAgentApi import removed - AWS endpoints no longer needed
 
 // Create server instance
 const server = new Server(
@@ -33,74 +38,538 @@ config();
 process.stdout.write = originalStdout;
 process.stderr.write = originalStderr;
 
-// Workday API configuration - Access Token Only
+// Workday OAuth configuration - Refresh Token Grant Only
 const WORKDAY_CONFIG = {
+  clientId: process.env.WORKDAY_CLIENT_ID || '',
+  clientSecret: process.env.WORKDAY_CLIENT_SECRET || '',
+  tokenEndpoint: process.env.WORKDAY_TOKEN_ENDPOINT || '',
   baseUrl: process.env.WORKDAY_BASE_URL || 'https://your-tenant.workday.com',
   tenant: process.env.WORKDAY_TENANT || 'your-tenant',
+  // Refresh token for direct access token generation
+  refreshToken: process.env.WORKDAY_REFRESH_TOKEN || '',
 };
 
-// No token storage needed - using direct access token from environment
+// Token storage file path
+const TOKEN_FILE = '.workday-tokens.json';
 
-// Simplified access token function - uses WORKDAY_ACCESS_TOKEN environment variable
+// Interface for stored tokens
+interface TokenData {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  scope: string;
+}
+
+// Token storage functions
+function saveTokens(tokens: TokenData): void {
+  try {
+    fs.writeFileSync(TOKEN_FILE, JSON.stringify(tokens, null, 2));
+  } catch (error) {
+    console.error('Failed to save tokens:', error);
+  }
+}
+
+function loadTokens(): TokenData | null {
+  try {
+    if (fs.existsSync(TOKEN_FILE)) {
+      const data = fs.readFileSync(TOKEN_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Failed to load tokens:', error);
+  }
+  return null;
+}
+
+function isTokenExpired(tokens: TokenData): boolean {
+  return Date.now() >= tokens.expires_at;
+}
+
+// Simplified access token function - always uses refresh token
 async function getValidAccessToken(): Promise<string> {
-  const accessToken = process.env.WORKDAY_ACCESS_TOKEN;
+  if (!WORKDAY_CONFIG.refreshToken) {
+    throw new Error('No refresh token configured. Please set WORKDAY_REFRESH_TOKEN in your environment variables.');
+  }
+
+  let tokens = loadTokens();
   
-  if (!accessToken) {
-    throw new Error('No access token configured. Please set WORKDAY_ACCESS_TOKEN in your environment variables.');
+  // If no tokens in storage, bootstrap from environment refresh token
+  if (!tokens) {
+    try {
+      tokens = await refreshAccessToken(WORKDAY_CONFIG.refreshToken);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('invalid_grant')) {
+        throw new Error('Your refresh token has expired or is invalid. Please update WORKDAY_REFRESH_TOKEN with a valid refresh token.');
+      } else {
+        throw new Error('Failed to obtain access token from refresh token. Please check your configuration and refresh token validity.');
+      }
+    }
   }
   
-  console.log('✅ Using WORKDAY_ACCESS_TOKEN environment variable');
-  return accessToken;
+  // If tokens are expired, refresh them
+  if (isTokenExpired(tokens)) {
+    try {
+      tokens = await refreshAccessToken(tokens.refresh_token);
+    } catch (error) {
+      // Try to use environment refresh token as fallback
+      if (WORKDAY_CONFIG.refreshToken && tokens.refresh_token !== WORKDAY_CONFIG.refreshToken) {
+        try {
+          tokens = await refreshAccessToken(WORKDAY_CONFIG.refreshToken);
+        } catch (fallbackError) {
+          throw new Error('Access token expired and refresh failed. Please update WORKDAY_REFRESH_TOKEN with a valid refresh token.');
+        }
+      } else {
+        throw new Error('Access token expired and refresh failed. Please update WORKDAY_REFRESH_TOKEN with a valid refresh token.');
+      }
+    }
+  }
+  
+  return tokens.access_token;
 }
+
+// Helper function to create API config
+function createApiConfig() {
+  return {
+    baseUrl: WORKDAY_CONFIG.baseUrl,
+    tenant: WORKDAY_CONFIG.tenant,
+    getAccessToken: getValidAccessToken,
+  };
+}
+
+// Shared tools list - keep in sync with MCP handler
+const ALL_TOOLS = [
+  // Auth tools
+  {
+    name: 'check_workday_auth_status',
+    description: 'Check current Workday authentication status',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  // STAFFING TOOLS - Core Worker Operations
+  {
+    name: 'get_workday_worker',
+    description: 'Get worker information from Workday Staffing API',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workerId: {
+          type: 'string',
+          description: 'Worker ID in Workday system (e.g., "21001", "EMP001")',
+        },
+      },
+      required: ['workerId'],
+    },
+  },
+  {
+    name: 'search_workday_workers',
+    description: 'Search for workers in Workday by name or other criteria',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        searchTerm: {
+          type: 'string',
+          description: 'Search term (e.g., "Logan McNeil", "Smith", "Engineering")',
+        },
+      },
+      required: ['searchTerm'],
+    },
+  },
+  {
+    name: 'list_workers',
+    description: 'List workers from Workday Staffing API',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: {
+          type: 'number',
+          description: 'Number of workers to list (default: 10)',
+        },
+      },
+    },
+  },
+  // Job Change Operations
+  {
+    name: 'initiate_job_change',
+    description: 'Initiate a job change for a worker',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workerId: {
+          type: 'string',
+          description: 'Worker ID for whom to initiate job change',
+        },
+        jobChangeData: {
+          type: 'object',
+          description: 'Optional job change data',
+        },
+      },
+      required: ['workerId'],
+    },
+  },
+  {
+    name: 'get_job_change',
+    description: 'Get details of a specific job change',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        jobChangeId: {
+          type: 'string',
+          description: 'Job change ID',
+        },
+      },
+      required: ['jobChangeId'],
+    },
+  },
+  {
+    name: 'submit_job_change',
+    description: 'Submit a job change for processing',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        jobChangeId: {
+          type: 'string',
+          description: 'Job change ID to submit',
+        },
+      },
+      required: ['jobChangeId'],
+    },
+  },
+  // Job and Organization Tools
+  {
+    name: 'get_job_families',
+    description: 'Get list of job families',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Maximum number of job families to return' },
+        offset: { type: 'number', description: 'Starting offset for pagination' },
+      },
+    },
+  },
+  {
+    name: 'get_job_profiles',
+    description: 'Get list of job profiles',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Maximum number of job profiles to return' },
+        offset: { type: 'number', description: 'Starting offset for pagination' },
+      },
+    },
+  },
+  {
+    name: 'get_supervisory_organizations',
+    description: 'Get list of supervisory organizations',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Maximum number of organizations to return' },
+        offset: { type: 'number', description: 'Starting offset for pagination' },
+      },
+    },
+  },
+  // LEARNING TOOLS
+  {
+    name: 'enroll_in_learning_content',
+    description: 'Enroll a worker in learning content',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workerId: {
+          type: 'string',
+          description: 'Worker ID to enroll',
+        },
+        learningContentId: {
+          type: 'string',
+          description: 'Learning content ID',
+        },
+        enrollmentData: {
+          type: 'object',
+          description: 'Optional enrollment configuration data',
+        },
+      },
+      required: ['workerId', 'learningContentId'],
+    },
+  },
+  {
+    name: 'get_learning_content',
+    description: 'Get learning content information',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Maximum number of learning content items to return' },
+        offset: { type: 'number', description: 'Starting offset for pagination' },
+      },
+    },
+  },
+  {
+    name: 'get_worker_learning_enrollments',
+    description: 'Get learning enrollments for a specific worker',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workerId: {
+          type: 'string',
+          description: 'Worker ID',
+        },
+      },
+      required: ['workerId'],
+    },
+  },
+  {
+    name: 'get_worker_learning_progress',
+    description: 'Get learning progress for a worker',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workerId: {
+          type: 'string',
+          description: 'Worker ID',
+        },
+      },
+      required: ['workerId'],
+    },
+  },
+  {
+    name: 'search_learning_content',
+    description: 'Search for learning content',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        searchTerm: {
+          type: 'string',
+          description: 'Search term for learning content',
+        },
+        limit: { type: 'number', description: 'Maximum number of results to return' },
+      },
+      required: ['searchTerm'],
+    },
+  },
+  // HCM AGENT TOOLS removed - AWS endpoints no longer needed
+  // PAYROLL TOOLS
+  {
+    name: 'create_one_time_payment',
+    description: 'Create a one-time payroll input/payment for a worker in Workday',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workerId: {
+          type: 'string',
+          description: 'Worker ID in Workday system (e.g., "21001", "EMP001")',
+        },
+        payComponentId: {
+          type: 'string',
+          description: 'Pay Component ID for the payment type (e.g., "BONUS", "OVERTIME")',
+        },
+        startDate: {
+          type: 'string',
+          description: 'Start date for the payment in YYYY-MM-DD format',
+        },
+        endDate: {
+          type: 'string',
+          description: 'End date for the payment in YYYY-MM-DD format',
+        },
+        amount: {
+          type: 'number',
+          description: 'Payment amount (e.g., 1000.00)',
+        },
+        currency: {
+          type: 'string',
+          description: 'Currency code (optional, defaults to pay group currency)',
+        },
+        comment: {
+          type: 'string',
+          description: 'Optional comment for the payment',
+        },
+      },
+      required: ['workerId', 'payComponentId', 'startDate', 'endDate', 'amount'],
+    },
+  },
+  // ACCOUNTS PAYABLE TOOLS
+  {
+    name: 'get_supplier_invoice_requests',
+    description: 'Retrieve a collection of supplier invoice requests with optional filters',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company filter' },
+        limit: { type: 'number', description: 'Maximum number of results' },
+        offset: { type: 'number', description: 'Starting offset for pagination' },
+      },
+    },
+  },
+  {
+    name: 'get_supplier_invoice_request',
+    description: 'Retrieve a specific supplier invoice request by ID',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        invoiceRequestId: {
+          type: 'string',
+          description: 'Supplier invoice request ID',
+        },
+      },
+      required: ['invoiceRequestId'],
+    },
+  },
+  {
+    name: 'create_supplier_invoice_request',
+    description: 'Create a new supplier invoice request',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        invoiceData: {
+          type: 'object',
+          description: 'Invoice request data including supplier, amounts, line items, etc.',
+        },
+      },
+      required: ['invoiceData'],
+    },
+  },
+  {
+    name: 'submit_supplier_invoice_request',
+    description: 'Submit a supplier invoice request for processing',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        invoiceRequestId: {
+          type: 'string',
+          description: 'Supplier invoice request ID to submit',
+        },
+      },
+      required: ['invoiceRequestId'],
+    },
+  },
+  {
+    name: 'get_supplier_invoice_request_lines',
+    description: 'Get line items for a supplier invoice request',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        invoiceRequestId: {
+          type: 'string',
+          description: 'Supplier invoice request ID',
+        },
+      },
+      required: ['invoiceRequestId'],
+    },
+  },
+  {
+    name: 'get_supplier_invoice_request_line',
+    description: 'Get a specific line item from a supplier invoice request',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        invoiceRequestId: {
+          type: 'string',
+          description: 'Supplier invoice request ID',
+        },
+        lineId: {
+          type: 'string',
+          description: 'Line item ID',
+        },
+      },
+      required: ['invoiceRequestId', 'lineId'],
+    },
+  },
+  {
+    name: 'get_supplier_invoice_request_attachments',
+    description: 'Get attachments for a supplier invoice request',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        invoiceRequestId: {
+          type: 'string',
+          description: 'Supplier invoice request ID',
+        },
+      },
+      required: ['invoiceRequestId'],
+    },
+  },
+  {
+    name: 'get_supplier_invoice_request_attachment',
+    description: 'Get a specific attachment from a supplier invoice request',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        invoiceRequestId: {
+          type: 'string',
+          description: 'Supplier invoice request ID',
+        },
+        attachmentId: {
+          type: 'string',
+          description: 'Attachment ID',
+        },
+      },
+      required: ['invoiceRequestId', 'attachmentId'],
+    },
+  },
+  {
+    name: 'create_supplier_invoice_request_attachment',
+    description: 'Add an attachment to a supplier invoice request',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        invoiceRequestId: {
+          type: 'string',
+          description: 'Supplier invoice request ID',
+        },
+        attachmentData: {
+          type: 'object',
+          description: 'Attachment data including file content and metadata',
+        },
+      },
+      required: ['invoiceRequestId', 'attachmentData'],
+    },
+  },
+  // ASOR TOOLS
+  {
+    name: 'get_agent_definitions',
+    description: 'Retrieve all Agent Definitions from the Agent System of Record',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'create_agent_definition',
+    description: 'Create or update an Agent Definition in the Agent System of Record',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Human readable name of the agent (required)',
+        },
+        description: {
+          type: 'string',
+          description: 'Human-readable description of the agent (required)',
+        },
+        version: {
+          type: 'string',
+          description: 'Version of the agent, format is up to the provider (required)',
+        },
+        url: {
+          type: 'string',
+          description: 'URL where the agent is hosted (required)',
+        },
+        skills: {
+          type: 'array',
+          description: 'Skills/capabilities the agent provides (required)',
+          items: { type: 'string' },
+        },
+      },
+      required: ['name', 'description', 'version', 'url', 'skills'],
+    },
+  },
+];
 
 // Set up all MCP handlers (copied from main index.ts)
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: [
-      // Auth tools
-      {
-        name: 'check_workday_auth_status',
-        description: 'Check current Workday authentication status',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      // Workday API tools
-      {
-        name: 'get_workday_worker',
-        description: 'Get Workday worker information by employee ID',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            workerId: { type: 'string', description: 'Employee ID or Worker ID' },
-          },
-          required: ['workerId'],
-        },
-      },
-      {
-        name: 'list_workday_workers',
-        description: 'List Workday workers with optional limit',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            limit: { type: 'number', description: 'Maximum number of workers to return (default: 10)' },
-          },
-        },
-      },
-      {
-        name: 'search_workday_workers',
-        description: 'Search Workday workers by name or other criteria',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            searchTerm: { type: 'string', description: 'Search term (name, email, etc.)' },
-          },
-          required: ['searchTerm'],
-        },
-      },
-      // Add more tools as needed from the original index.ts
-    ],
+    tools: ALL_TOOLS,
   };
 });
 
@@ -111,24 +580,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
 
       case 'check_workday_auth_status':
-        const hasAccessToken = !!process.env.WORKDAY_ACCESS_TOKEN;
+        const currentTokens = loadTokens();
         return {
           content: [{
             type: 'text',
             text: JSON.stringify({
-              authentication_status: hasAccessToken ? 'authenticated' : 'not_authenticated',
-              token_type: 'access_token',
-              token_source: 'WORKDAY_ACCESS_TOKEN environment variable',
-              environment_variables: {
-                workday_access_token: process.env.WORKDAY_ACCESS_TOKEN ? '✅ Set' : '❌ Not set',
-                workday_base_url: process.env.WORKDAY_BASE_URL ? '✅ Set' : '❌ Not set',
-                workday_tenant: process.env.WORKDAY_TENANT ? '✅ Set' : '❌ Not set'
-              },
+              authenticated: !!currentTokens,
+              tokenExpired: currentTokens ? isTokenExpired(currentTokens) : null,
+              expiresAt: currentTokens ? new Date(currentTokens.expires_at).toISOString() : null,
+              hasRefreshToken: !!WORKDAY_CONFIG.refreshToken,
               configuration: {
+                hasClientId: !!WORKDAY_CONFIG.clientId,
+                hasClientSecret: !!WORKDAY_CONFIG.clientSecret,
                 tenant: WORKDAY_CONFIG.tenant,
                 baseUrl: WORKDAY_CONFIG.baseUrl
-              },
-              timestamp: new Date().toISOString()
+              }
             }, null, 2)
           }],
         };
@@ -167,6 +633,315 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }],
         };
 
+      case 'list_workers':
+        const workersLimit = args?.limit ? Number(args.limit) : 10;
+        const workersResult = await staffingApi.getStaffingWorkers(createApiConfig(), workersLimit);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(workersResult, null, 2)
+          }],
+        };
+
+      // Job Change Operations
+      case 'initiate_job_change':
+        if (!args || !args.workerId) {
+          throw new Error('Missing required parameter: workerId');
+        }
+        const jobChangeResult = await staffingApi.initiateJobChange(createApiConfig(), args.workerId as string, args.jobChangeData);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(jobChangeResult, null, 2)
+          }],
+        };
+
+      case 'get_job_change':
+        if (!args || !args.jobChangeId) {
+          throw new Error('Missing required parameter: jobChangeId');
+        }
+                const jobChangeInfo = await staffingApi.getJobChange(createApiConfig(), args.jobChangeId as string);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(jobChangeInfo, null, 2)
+          }],
+        };
+
+      case 'submit_job_change':
+        if (!args || !args.jobChangeId) {
+          throw new Error('Missing required parameter: jobChangeId');
+        }
+                const submitResult = await staffingApi.submitJobChange(createApiConfig(), args.jobChangeId as string);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(submitResult, null, 2)
+          }],
+        };
+
+      case 'get_job_families':
+        const jobFamilies = await staffingApi.getJobFamilies(createApiConfig(), args?.limit ? Number(args.limit) : undefined, args?.offset ? Number(args.offset) : undefined);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(jobFamilies, null, 2)
+          }],
+        };
+
+      case 'get_job_profiles':
+        const jobProfiles = await staffingApi.getJobProfiles(createApiConfig(), args?.limit ? Number(args.limit) : undefined, args?.offset ? Number(args.offset) : undefined);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(jobProfiles, null, 2)
+          }],
+        };
+
+      case 'get_supervisory_organizations':
+        const supervisoryOrgs = await staffingApi.getSupervisoryOrganizations(createApiConfig(), args?.limit ? Number(args.limit) : undefined, args?.offset ? Number(args.offset) : undefined);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(supervisoryOrgs, null, 2)
+          }],
+        };
+
+      // Learning Tools
+      case 'enroll_in_learning_content':
+        if (!args || !args.workerId || !args.learningContentId) {
+          throw new Error('Missing required parameters: workerId, learningContentId');
+        }
+        const enrollmentResult = await learningApi.enrollInLearningContent(createApiConfig(), {
+          workerId: args.workerId as string,
+          learningContentId: args.learningContentId as string,
+          ...(args.enrollmentData || {})
+        });
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(enrollmentResult, null, 2)
+          }],
+        };
+
+      case 'get_learning_content':
+        const learningContent = await learningApi.getLearningContent(createApiConfig(), args?.limit ? Number(args.limit) : undefined, args?.offset ? Number(args.offset) : undefined);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(learningContent, null, 2)
+          }],
+        };
+
+      case 'get_worker_learning_enrollments':
+        if (!args || !args.workerId) {
+          throw new Error('Missing required parameter: workerId');
+        }
+        const learningEnrollments = await learningApi.getWorkerLearningEnrollments(createApiConfig(), args.workerId as string);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(learningEnrollments, null, 2)
+          }],
+        };
+
+      case 'get_worker_learning_progress':
+        if (!args || !args.workerId) {
+          throw new Error('Missing required parameter: workerId');
+        }
+        const learningProgress = await learningApi.getWorkerLearningProgress(createApiConfig(), args.workerId as string);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(learningProgress, null, 2)
+          }],
+        };
+
+      case 'search_learning_content':
+        if (!args || !args.searchTerm) {
+          throw new Error('Missing required parameter: searchTerm');
+        }
+        const learningSearchResults = await learningApi.searchLearningContent(createApiConfig(), {
+          searchTerm: args.searchTerm as string,
+          limit: args?.limit ? Number(args.limit) : undefined
+        });
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(learningSearchResults, null, 2)
+          }],
+        };
+
+      // HCM Agent Tools removed - AWS endpoints no longer needed
+
+      // Payroll Tools
+      case 'create_one_time_payment':
+        if (!args || !args.workerId || !args.payComponentId || !args.startDate || !args.endDate || !args.amount) {
+          throw new Error('Missing required parameters: workerId, payComponentId, startDate, endDate, amount');
+        }
+        // Note: This function is not yet implemented in the API modules
+        const paymentResult = {
+          status: 'error',
+          message: 'One-time payment creation is not yet implemented',
+          requestedPayment: {
+            workerId: args.workerId,
+            payComponentId: args.payComponentId,
+            startDate: args.startDate,
+            endDate: args.endDate,
+            amount: args.amount,
+            currency: args.currency,
+            comment: args.comment,
+          }
+        };
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(paymentResult, null, 2)
+          }],
+        };
+
+      // Accounts Payable Tools
+      case 'get_supplier_invoice_requests':
+        const invoiceRequests = await accountsPayableApi.getSupplierInvoiceRequests(createApiConfig(), {
+          company: args?.company ? [args.company as string] : undefined,
+          limit: args?.limit ? Number(args.limit) : undefined,
+          offset: args?.offset ? Number(args.offset) : undefined,
+        });
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(invoiceRequests, null, 2)
+          }],
+        };
+
+      case 'get_supplier_invoice_request':
+        if (!args || !args.invoiceRequestId) {
+          throw new Error('Missing required parameter: invoiceRequestId');
+        }
+        const invoiceRequest = await accountsPayableApi.getSupplierInvoiceRequest(createApiConfig(), args.invoiceRequestId as string);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(invoiceRequest, null, 2)
+          }],
+        };
+
+      case 'create_supplier_invoice_request':
+        if (!args || !args.invoiceData) {
+          throw new Error('Missing required parameter: invoiceData');
+        }
+        const createInvoiceResult = await accountsPayableApi.createSupplierInvoiceRequest(createApiConfig(), args.invoiceData as any);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(createInvoiceResult, null, 2)
+          }],
+        };
+
+      case 'submit_supplier_invoice_request':
+        if (!args || !args.invoiceRequestId) {
+          throw new Error('Missing required parameter: invoiceRequestId');
+        }
+        const submitInvoiceResult = await accountsPayableApi.submitSupplierInvoiceRequest(createApiConfig(), args.invoiceRequestId as string);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(submitInvoiceResult, null, 2)
+          }],
+        };
+
+      case 'get_supplier_invoice_request_lines':
+        if (!args || !args.invoiceRequestId) {
+          throw new Error('Missing required parameter: invoiceRequestId');
+        }
+        const invoiceLines = await accountsPayableApi.getSupplierInvoiceRequestLines(createApiConfig(), args.invoiceRequestId as string);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(invoiceLines, null, 2)
+          }],
+        };
+
+      case 'get_supplier_invoice_request_line':
+        if (!args || !args.invoiceRequestId || !args.lineId) {
+          throw new Error('Missing required parameters: invoiceRequestId, lineId');
+        }
+        const invoiceLine = await accountsPayableApi.getSupplierInvoiceRequestLine(createApiConfig(), args.invoiceRequestId as string, args.lineId as string);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(invoiceLine, null, 2)
+          }],
+        };
+
+      case 'get_supplier_invoice_request_attachments':
+        if (!args || !args.invoiceRequestId) {
+          throw new Error('Missing required parameter: invoiceRequestId');
+        }
+        const attachments = await accountsPayableApi.getSupplierInvoiceRequestAttachments(createApiConfig(), args.invoiceRequestId as string);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(attachments, null, 2)
+          }],
+        };
+
+      case 'get_supplier_invoice_request_attachment':
+        if (!args || !args.invoiceRequestId || !args.attachmentId) {
+          throw new Error('Missing required parameters: invoiceRequestId, attachmentId');
+        }
+        const attachment = await accountsPayableApi.getSupplierInvoiceRequestAttachment(createApiConfig(), args.invoiceRequestId as string, args.attachmentId as string);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(attachment, null, 2)
+          }],
+        };
+
+      case 'create_supplier_invoice_request_attachment':
+        if (!args || !args.invoiceRequestId || !args.attachmentData) {
+          throw new Error('Missing required parameters: invoiceRequestId, attachmentData');
+        }
+        const createAttachmentResult = await accountsPayableApi.createSupplierInvoiceRequestAttachment(createApiConfig(), args.invoiceRequestId as string, args.attachmentData);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(createAttachmentResult, null, 2)
+          }],
+        };
+
+      // ASOR Tools
+      case 'get_agent_definitions':
+        const agentDefinitions = await asorApi.getAgentDefinitions(createApiConfig());
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(agentDefinitions, null, 2)
+          }],
+        };
+
+      case 'create_agent_definition':
+        if (!args || !args.name || !args.description || !args.version || !args.url || !args.skills) {
+          throw new Error('Missing required parameters: name, description, version, url, skills');
+        }
+        const createAgentResult = await asorApi.createAgentDefinition(createApiConfig(), {
+          name: args.name as string,
+          description: args.description as string,
+          version: args.version as string,
+          url: args.url as string,
+          skills: (args.skills as string[]).map(skill => ({
+            id: skill,
+            name: skill,
+            description: skill
+          })),
+        });
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(createAgentResult, null, 2)
+          }],
+        };
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -184,7 +959,65 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Refresh token logic removed - using direct access token only
+// Refresh token function - simplified for direct refresh token usage
+
+async function refreshAccessToken(refreshToken: string): Promise<TokenData> {
+  // Create Basic Auth header with Client ID as username and Client Secret as password
+  const credentials = `${WORKDAY_CONFIG.clientId}:${WORKDAY_CONFIG.clientSecret}`;
+  const encodedCredentials = Buffer.from(credentials).toString('base64');
+  
+  const postData = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken
+  });
+
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: new URL(WORKDAY_CONFIG.tokenEndpoint).hostname,
+      port: 443,
+      path: new URL(WORKDAY_CONFIG.tokenEndpoint).pathname,
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${encodedCredentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData.toString())
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        try {
+          const response = JSON.parse(data);
+          if (res.statusCode === 200) {
+            const tokens: TokenData = {
+              access_token: response.access_token,
+              refresh_token: response.refresh_token || refreshToken,
+              expires_at: Date.now() + (response.expires_in * 1000),
+              scope: response.scope
+            };
+            saveTokens(tokens);
+            resolve(tokens);
+          } else {
+            reject(new Error(`Token refresh failed (${res.statusCode}): ${response.error_description || data}`));
+          }
+        } catch (error) {
+          reject(new Error(`Failed to parse refresh response: ${error instanceof Error ? error.message : 'Unknown error'}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(new Error(`Token refresh request error: ${error.message}`));
+    });
+
+    req.write(postData.toString());
+    req.end();
+  });
+}
 
 // Worker API functions (simplified versions)
 async function getWorkerInfo(workerId: string): Promise<any> {
@@ -337,50 +1170,7 @@ app.get('/health', (req, res) => {
 // MCP tools endpoint
 app.get('/mcp/tools', async (req, res) => {
   try {
-    const tools = [
-
-      {
-        name: 'check_workday_auth_status',
-        description: 'Check current Workday authentication status',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'get_workday_worker',
-        description: 'Get Workday worker information by employee ID',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            workerId: { type: 'string', description: 'Employee ID or Worker ID' },
-          },
-          required: ['workerId'],
-        },
-      },
-      {
-        name: 'list_workday_workers',
-        description: 'List Workday workers with optional limit',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            limit: { type: 'number', description: 'Maximum number of workers to return (default: 10)' },
-          },
-        },
-      },
-      {
-        name: 'search_workday_workers',
-        description: 'Search Workday workers by name or other criteria',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            searchTerm: { type: 'string', description: 'Search term (name, email, etc.)' },
-          },
-          required: ['searchTerm'],
-        },
-      },
-    ];
-    res.json({ tools });
+    res.json({ tools: ALL_TOOLS });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
@@ -397,21 +1187,18 @@ app.post('/mcp/tools/:toolName', async (req, res) => {
     switch (toolName) {
 
       case 'check_workday_auth_status':
-        const hasAccessToken = !!process.env.WORKDAY_ACCESS_TOKEN;
+        const currentTokens = loadTokens();
         result = {
-          authentication_status: hasAccessToken ? 'authenticated' : 'not_authenticated',
-          token_type: 'access_token',
-          token_source: 'WORKDAY_ACCESS_TOKEN environment variable',
-          environment_variables: {
-            workday_access_token: process.env.WORKDAY_ACCESS_TOKEN ? '✅ Set' : '❌ Not set',
-            workday_base_url: process.env.WORKDAY_BASE_URL ? '✅ Set' : '❌ Not set',
-            workday_tenant: process.env.WORKDAY_TENANT ? '✅ Set' : '❌ Not set'
-          },
+          authenticated: !!currentTokens,
+          tokenExpired: currentTokens ? isTokenExpired(currentTokens) : null,
+          expiresAt: currentTokens ? new Date(currentTokens.expires_at).toISOString() : null,
+          hasRefreshToken: !!WORKDAY_CONFIG.refreshToken,
           configuration: {
+            hasClientId: !!WORKDAY_CONFIG.clientId,
+            hasClientSecret: !!WORKDAY_CONFIG.clientSecret,
             tenant: WORKDAY_CONFIG.tenant,
             baseUrl: WORKDAY_CONFIG.baseUrl
-          },
-          timestamp: new Date().toISOString()
+          }
         };
         break;
 
@@ -432,6 +1219,26 @@ app.post('/mcp/tools/:toolName', async (req, res) => {
           throw new Error('Missing required parameter: searchTerm');
         }
         result = await searchWorkers(args.searchTerm as string);
+        break;
+
+      case 'create_one_time_payment':
+        if (!args || !args.workerId || !args.payComponentId || !args.startDate || !args.endDate || !args.amount) {
+          throw new Error('Missing required parameters: workerId, payComponentId, startDate, endDate, amount');
+        }
+        // Note: This function is not yet implemented in the API modules
+        result = {
+          status: 'error',
+          message: 'One-time payment creation is not yet implemented',
+          requestedPayment: {
+            workerId: args.workerId,
+            payComponentId: args.payComponentId,
+            startDate: args.startDate,
+            endDate: args.endDate,
+            amount: args.amount,
+            currency: args.currency,
+            comment: args.comment,
+          }
+        };
         break;
 
       default:
