@@ -1241,6 +1241,51 @@ app.post('/mcp/tools/:toolName', async (req, res) => {
         };
         break;
 
+      case 'get_job_families':
+        const jobFamilies = await staffingApi.getJobFamilies(createApiConfig(), args?.limit ? Number(args.limit) : undefined, args?.offset ? Number(args.offset) : undefined);
+        result = jobFamilies;
+        break;
+
+      case 'get_job_profiles':
+        const jobProfiles = await staffingApi.getJobProfiles(createApiConfig(), args?.limit ? Number(args.limit) : undefined, args?.offset ? Number(args.offset) : undefined);
+        result = jobProfiles;
+        break;
+
+      case 'get_supervisory_organizations':
+        const supervisoryOrgs = await staffingApi.getSupervisoryOrganizations(createApiConfig(), args?.limit ? Number(args.limit) : undefined, args?.offset ? Number(args.offset) : undefined);
+        result = supervisoryOrgs;
+        break;
+
+      case 'initiate_job_change':
+        if (!args || !args.workerId) {
+          throw new Error('Missing required parameter: workerId');
+        }
+        const jobChangeResult = await staffingApi.initiateJobChange(createApiConfig(), args.workerId as string, args.jobChangeData);
+        result = jobChangeResult;
+        break;
+
+      case 'get_job_change':
+        if (!args || !args.jobChangeId) {
+          throw new Error('Missing required parameter: jobChangeId');
+        }
+        const jobChangeInfo = await staffingApi.getJobChange(createApiConfig(), args.jobChangeId as string);
+        result = jobChangeInfo;
+        break;
+
+      case 'submit_job_change':
+        if (!args || !args.jobChangeId) {
+          throw new Error('Missing required parameter: jobChangeId');
+        }
+        const submitResult = await staffingApi.submitJobChange(createApiConfig(), args.jobChangeId as string);
+        result = submitResult;
+        break;
+
+      case 'list_workers':
+        const workersLimit = args?.limit ? Number(args.limit) : 10;
+        const workersResult = await staffingApi.getStaffingWorkers(createApiConfig(), workersLimit);
+        result = workersResult;
+        break;
+
       default:
         throw new Error(`Unknown tool: ${toolName}`);
     }

@@ -57,6 +57,9 @@ WORKDAY_AUTH_ENDPOINT=https://your-tenant.workday.com/oauth2/authorize
 # Redirect URI (update with your Render.com URL)
 WORKDAY_REDIRECT_URI=https://your-app-name.onrender.com/callback
 
+# Refresh Token (for automatic token management)
+WORKDAY_REFRESH_TOKEN=your-refresh-token-here
+
 # Environment
 NODE_ENV=production
 ```
@@ -133,6 +136,7 @@ curl -X POST https://your-app-name.onrender.com/mcp/tools/search_workday_workers
 | `WORKDAY_TOKEN_ENDPOINT` | Yes | OAuth token endpoint | `https://impl-cc.workday.com/oauth2/token` |
 | `WORKDAY_AUTH_ENDPOINT` | Yes | OAuth authorization endpoint | `https://impl-cc.workday.com/oauth2/authorize` |
 | `WORKDAY_REDIRECT_URI` | Yes | OAuth redirect URI | `https://your-app.onrender.com/callback` |
+| `WORKDAY_REFRESH_TOKEN` | Yes | OAuth refresh token for automatic token management | `eyJ0eXAiOiJKV1Q...` |
 | `WORKDAY_BEARER_TOKEN` | No | Legacy bearer token | `eyJ0eXAiOiJKV1Q...` |
 | `NODE_ENV` | No | Environment mode | `production` |
 

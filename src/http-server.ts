@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 
 // Same server setup as stdio version
@@ -104,17 +104,17 @@ app.use(cors());
 app.use(express.json());
 
 // REST API endpoints as an alternative to MCP
-app.get('/api/users', (req, res) => {
+app.get('/api/users', (req: Request, res: Response) => {
   res.json(sampleData.users);
 });
 
-app.get('/api/users/:id', (req, res) => {
+app.get('/api/users/:id', (req: Request, res: Response) => {
   const user = sampleData.users.find(u => u.id === parseInt(req.params.id));
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json(user);
 });
 
-app.post('/api/users', (req, res) => {
+app.post('/api/users', (req: Request, res: Response) => {
   const { name, email } = req.body;
   const newId = Math.max(...sampleData.users.map(u => u.id)) + 1;
   const newUser = { id: newId, name, email };

@@ -139,12 +139,15 @@ export async function submitJobChange(config: WorkdayConfig, jobChangeId: string
 
 // Job Families API functions 
 export async function getJobFamilies(config: WorkdayConfig, limit?: number, offset?: number): Promise<any> {
-  // Try different possible endpoints for job families
+  // Try different possible endpoints for job families in Staffing API only
   const possiblePaths = [
+    // Staffing API v7 paths only
     `/ccx/api/staffing/v7/${config.tenant}/jobFamilies`,
-    `/ccx/api/talent/v1/${config.tenant}/jobFamilies`,
+    `/ccx/api/staffing/v7/${config.tenant}/job-families`,
     `/ccx/api/staffing/v7/${config.tenant}/jobs/families`,
-    `/ccx/api/staffing/v7/${config.tenant}/job-families`
+    `/ccx/api/staffing/v7/${config.tenant}/referenceData/jobFamilies`,
+    `/ccx/api/staffing/v7/${config.tenant}/job_families`,
+    `/ccx/api/staffing/v7/${config.tenant}/jobFamily`,
   ];
   
   const params = new URLSearchParams();
@@ -158,12 +161,23 @@ export async function getJobFamilies(config: WorkdayConfig, limit?: number, offs
       const path = basePath + queryString;
       return await makeWorkdayRequest(config, 'GET', path);
     } catch (error) {
-      console.log(`Failed to fetch from ${basePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       // Continue to next path
     }
   }
   
-  throw new Error('Job families endpoint not found. This may not be available in the REST Staffing API v7. Consider using SOAP API or check if job families are available in the Talent Management API.');
+  // If no endpoints work, provide a more helpful error with alternative suggestions
+  return {
+    error: 'Job families endpoint not found in Staffing API',
+    message: 'Job families may not be available through the Staffing API v7 for your tenant configuration.',
+    suggestions: [
+      'Job families might be available through SOAP APIs instead of REST',
+      'Check if your tenant has job families configured in Workday',
+      'Verify your user has permissions to access job family data in Staffing API',
+      'Consider using supervisory organizations for organizational structure data'
+    ],
+    attemptedEndpoints: possiblePaths,
+    alternative: 'Use get_supervisory_organizations tool for organizational structure data'
+  };
 }
 
 export async function getJobFamily(config: WorkdayConfig, jobFamilyId: string): Promise<any> {
@@ -171,14 +185,31 @@ export async function getJobFamily(config: WorkdayConfig, jobFamilyId: string): 
   return makeWorkdayRequest(config, 'GET', path);
 }
 
-// Job Profiles API functions - Note: Job profiles may not be available in REST Staffing API v7
-// They might be in Talent Management API or a different endpoint structure
+// Job Profiles API functions
 export async function getJobProfiles(config: WorkdayConfig, limit?: number, offset?: number): Promise<any> {
-  // Try different possible endpoints for job profiles
+  // Try different possible endpoints for job profiles across different APIs
   const possiblePaths = [
+    // Staffing API v7 paths
     `/ccx/api/staffing/v7/${config.tenant}/jobProfiles`,
+    `/ccx/api/staffing/v7/${config.tenant}/job-profiles`,
+    `/ccx/api/staffing/v7/${config.tenant}/jobs/profiles`,
+    `/ccx/api/staffing/v7/${config.tenant}/referenceData/jobProfiles`,
+    
+    // Talent Management API paths
     `/ccx/api/talent/v1/${config.tenant}/jobProfiles`,
-    `/ccx/api/staffing/v7/${config.tenant}/jobs/profiles`
+    `/ccx/api/talent/v2/${config.tenant}/jobProfiles`,
+    
+    // HCM API paths
+    `/ccx/api/hcm/v1/${config.tenant}/jobProfiles`,
+    `/ccx/api/hcm/v1/${config.tenant}/referenceData/jobProfiles`,
+    
+    // Common Data API paths  
+    `/ccx/api/common/v1/${config.tenant}/jobProfiles`,
+    `/ccx/api/common/v1/${config.tenant}/referenceData/jobProfiles`,
+    
+    // Alternative naming conventions
+    `/ccx/api/staffing/v7/${config.tenant}/job_profiles`,
+    `/ccx/api/staffing/v7/${config.tenant}/jobProfile`,
   ];
   
   const params = new URLSearchParams();
@@ -192,12 +223,23 @@ export async function getJobProfiles(config: WorkdayConfig, limit?: number, offs
       const path = basePath + queryString;
       return await makeWorkdayRequest(config, 'GET', path);
     } catch (error) {
-      console.log(`Failed to fetch from ${basePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       // Continue to next path
     }
   }
   
-  throw new Error('Job profiles endpoint not found. This may not be available in the REST Staffing API v7. Consider using SOAP API or check if job profiles are available in the Talent Management API.');
+  // If no endpoints work, provide a more helpful error with alternative suggestions
+  return {
+    error: 'Job profiles endpoint not found in REST APIs',
+    message: 'Job profiles may not be available through the REST APIs for your tenant configuration.',
+    suggestions: [
+      'Job profiles might be available through SOAP APIs',
+      'Check if your tenant has job profiles configured in Workday',
+      'Verify your user has permissions to access job profile data',
+      'Try using supervisory organizations or workers endpoints for organization structure'
+    ],
+    attemptedEndpoints: possiblePaths,
+    alternative: 'Use get_supervisory_organizations or search_workday_workers for organizational data'
+  };
 }
 
 export async function getJobProfile(config: WorkdayConfig, jobProfileId: string): Promise<any> {

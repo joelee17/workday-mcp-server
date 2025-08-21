@@ -25,4 +25,6 @@ services:
       - key: WORKDAY_REDIRECT_URI
         sync: false
       - key: WORKDAY_BEARER_TOKEN
+        sync: false
+      - key: WORKDAY_REFRESH_TOKEN
         sync: false 
