@@ -64,12 +64,6 @@ WORKDAY_REFRESH_TOKEN=your-refresh-token-here
 NODE_ENV=production
 ```
 
-#### Optional Variables
-```bash
-# Legacy bearer token for backward compatibility
-WORKDAY_BEARER_TOKEN=your-legacy-token-here
-```
-
 ### 4. Update OAuth Redirect URI
 
 **Important**: Update your Workday OAuth client configuration to include your Render.com URL:
@@ -137,7 +131,6 @@ curl -X POST https://your-app-name.onrender.com/mcp/tools/search_workday_workers
 | `WORKDAY_AUTH_ENDPOINT` | Yes | OAuth authorization endpoint | `https://impl-cc.workday.com/oauth2/authorize` |
 | `WORKDAY_REDIRECT_URI` | Yes | OAuth redirect URI | `https://your-app.onrender.com/callback` |
 | `WORKDAY_REFRESH_TOKEN` | Yes | OAuth refresh token for automatic token management | `eyJ0eXAiOiJKV1Q...` |
-| `WORKDAY_BEARER_TOKEN` | No | Legacy bearer token | `eyJ0eXAiOiJKV1Q...` |
 | `NODE_ENV` | No | Environment mode | `production` |
 
 ### Render.com Specific Settings
