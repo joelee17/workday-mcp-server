@@ -712,10 +712,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!args || !args.workerId || !args.learningContentId) {
           throw new Error('Missing required parameters: workerId, learningContentId');
         }
+        const enrollmentData = (args.enrollmentData as Record<string, any>) || {};
         const enrollmentResult = await learningApi.enrollInLearningContent(createApiConfig(), {
           workerId: args.workerId as string,
           learningContentId: args.learningContentId as string,
-          ...(args.enrollmentData || {})
+          ...enrollmentData
         });
         return {
           content: [{
