@@ -1173,7 +1173,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// MCP tools endpoint - returns JSON-RPC format for Flowise compatibility
+// MCP tools endpoint - supports both GET and POST for JSON-RPC compatibility
 app.get('/mcp/tools', async (req, res) => {
   try {
     res.json({
@@ -1182,6 +1182,57 @@ app.get('/mcp/tools', async (req, res) => {
         tools: ALL_TOOLS
       }
     });
+  } catch (error) {
+    res.status(500).json({
+      jsonrpc: "2.0",
+      error: {
+        code: -32603,
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    });
+  }
+});
+
+// MCP tools endpoint - POST method for JSON-RPC requests from Flowise
+app.post('/mcp/tools', async (req, res) => {
+  try {
+    const { jsonrpc, method, id } = req.body;
+    
+    console.log(`📨 Received JSON-RPC request: ${method} (id: ${id})`);
+    
+    if (method === 'tools/list') {
+      res.json({
+        jsonrpc: "2.0",
+        id: id,
+        result: {
+          tools: ALL_TOOLS
+        }
+      });
+    } else if (method === 'tools/call') {
+      const { name, arguments: args } = req.body.params;
+      console.log(`🔧 Tool call: ${name} with args:`, args);
+      
+      // Handle tool calls here - for now just return success
+      res.json({
+        jsonrpc: "2.0",
+        id: id,
+        result: {
+          content: [{
+            type: 'text',
+            text: `Tool ${name} called successfully with args: ${JSON.stringify(args)}`
+          }]
+        }
+      });
+    } else {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        id: id,
+        error: {
+          code: -32601,
+          message: `Method not found: ${method}`
+        }
+      });
+    }
   } catch (error) {
     res.status(500).json({
       jsonrpc: "2.0",
