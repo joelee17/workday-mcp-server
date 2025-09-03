@@ -1310,3 +1310,4 @@ app.listen(PORT, () => {
   console.log(`🎯 Environment: ${process.env.NODE_ENV || 'development'}`);
 }); // Force redeploy
 // Force redeploy 2
+// Force redeploy 3 - MCP JSON-RPC fix
