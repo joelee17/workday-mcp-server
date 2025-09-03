@@ -836,27 +836,84 @@ const UTILITY_TOOLS = [
       },
 ];
 
+const ABSENCE_TOOLS = [
+  {
+    name: 'request_time_off',
+    description: 'Request time off for a worker in Workday (Worker ID: 3aa5550b7fe348b98d7b5741afc65534)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: {
+          type: 'array',
+          description: 'Array of time off days to request',
+          items: {
+            type: 'object',
+            properties: {
+              date: {
+                type: 'string',
+                description: 'Date of the time off request in YYYY-MM-DD format',
+              },
+              dailyQuantity: {
+                type: 'number',
+                description: 'Number of hours/days for this day',
+              },
+              timeOffType: {
+                type: 'object',
+                description: 'Time off type information',
+                properties: {
+                  id: {
+                    type: 'string',
+                    description: 'Workday ID of the time off type (e.g., "e7363fe834bd4c2883d36652ac6c979a")',
+                  },
+                },
+                required: ['id'],
+              },
+              start: {
+                type: 'string',
+                description: 'Start time in ISO format (e.g., "2025-08-06T08:00:00.000Z")',
+              },
+              end: {
+                type: 'string',
+                description: 'End time in ISO format (e.g., "2025-08-08T17:00:00.000Z")',
+              },
+              comment: {
+                type: 'string',
+                description: 'Optional comment for the time off request',
+              },
+            },
+            required: ['date', 'dailyQuantity', 'timeOffType'],
+          },
+        },
+      },
+      required: ['workerId', 'days'],
+    },
+  },
+];
+
 // List available tools - organized by service
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       // Staffing API Tools
       ...STAFFING_TOOLS,
-      
-      // Learning API Tools  
+
+      // Learning API Tools
       ...LEARNING_TOOLS,
-      
+
       // Payroll API Tools
       ...PAYROLL_TOOLS,
-      
+
       // Accounts Payable API Tools
       ...ACCOUNTS_PAYABLE_TOOLS,
-      
+
       // ASOR API Tools
       ...ASOR_TOOLS,
-      
+
+      // Absence API Tools
+      ...ABSENCE_TOOLS,
+
       // HCM Agent API Tools removed - AWS endpoints no longer needed
-      
+
       // Utility Tools
       ...UTILITY_TOOLS,
     ],
@@ -1386,6 +1443,86 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 tenant: WORKDAY_CONFIG.tenant
               }
             }, null, 2)
+          }],
+        };
+      }
+
+      // ABSENCE API TOOLS
+      case 'request_time_off': {
+        const { days } = args as {
+          days: Array<{
+            date: string;
+            dailyQuantity: number;
+            timeOffType: { id: string };
+            start?: string;
+            end?: string;
+            comment?: string;
+          }>;
+        };
+
+        const workerId = '3aa5550b7fe348b98d7b5741afc65534';
+
+        // Make the API call to request time off
+        const accessToken = await getValidAccessToken();
+
+        const payload = {
+          days: days.map(day => ({
+            date: day.date,
+            dailyQuantity: day.dailyQuantity,
+            timeOffType: { id: day.timeOffType.id },
+            ...(day.start && { start: day.start }),
+            ...(day.end && { end: day.end }),
+            ...(day.comment && { comment: day.comment }),
+          }))
+        };
+
+        const url = `${WORKDAY_CONFIG.baseUrl}/ccx/api/absenceManagement/v2/${WORKDAY_CONFIG.tenant}/workers/${workerId}/requestTimeOff`;
+
+        const options = {
+          hostname: new URL(WORKDAY_CONFIG.baseUrl).hostname,
+          port: 443,
+          path: `/ccx/api/absenceManagement/v2/${WORKDAY_CONFIG.tenant}/workers/${workerId}/requestTimeOff`,
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'Workday-MCP-Server/1.0'
+          }
+        };
+
+        const result = await new Promise<any>((resolve, reject) => {
+          const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => {
+              data += chunk;
+            });
+            res.on('end', () => {
+              try {
+                const response = JSON.parse(data);
+                if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                  resolve(response);
+                } else {
+                  reject(new Error(`Time off request failed (${res.statusCode}): ${response?.message || data}`));
+                }
+              } catch (error) {
+                reject(new Error(`Failed to parse time off response: ${error instanceof Error ? error.message : 'Unknown error'}`));
+              }
+            });
+          });
+
+          req.on('error', (error) => {
+            reject(new Error(`Time off request network error: ${error.message}`));
+          });
+
+          req.write(JSON.stringify(payload));
+          req.end();
+        });
+
+        return {
+          content: [{
+            type: 'text',
+            text: `🎯 Time Off Request Submitted for Worker ${workerId}\n\n📅 Request Details:\n${JSON.stringify(payload, null, 2)}\n\n✅ Response:\n${JSON.stringify(result, null, 2)}`
           }],
         };
       }
