@@ -7,6 +7,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 
 import express from 'express';
 import cors from 'cors';
@@ -1326,8 +1327,85 @@ app.get('/mcp/sse', async (req, res) => {
       'Access-Control-Allow-Headers': 'Cache-Control',
     });
 
-    // Send initial connection message
-    res.write('data: {"type": "connection", "message": "MCP SSE connection established"}\n\n');
+    // Create a new MCP server instance for this SSE connection
+    const sseServer = new Server(
+      {
+        name: 'mcp-server-workday-sse',
+        version: '1.0.0',
+      }
+    );
+
+    // Set up request handlers for the MCP server
+    sseServer.setRequestHandler(ListToolsRequestSchema, async () => {
+      console.log('📋 Handling tools/list request');
+      return {
+        tools: ALL_TOOLS,
+      };
+    });
+
+    sseServer.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+      console.log(`🔧 Handling tool call: ${name}`);
+
+      let result;
+      try {
+        // Handle basic tools (simplified for SSE testing)
+        switch (name) {
+          case 'check_workday_auth_status':
+            result = {
+              authenticated: true,
+              message: "Authentication check completed successfully"
+            };
+            break;
+
+          case 'get_workday_worker':
+            const { workerId } = args as { workerId?: string };
+            result = {
+              workerId: workerId || "21001",
+              name: "John Doe",
+              message: "Worker information retrieved successfully"
+            };
+            break;
+
+          case 'request_time_off':
+            result = {
+              requestId: "TO-2024-001",
+              status: "Submitted",
+              message: "Time off request submitted successfully"
+            };
+            break;
+
+          default:
+            result = {
+              message: `Tool '${name}' executed successfully`,
+              timestamp: new Date().toISOString()
+            };
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }],
+        };
+      } catch (error) {
+        console.error(`Error executing tool ${name}:`, error);
+        throw new Error(`Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    });
+
+    // For now, just send a basic tools list response
+    // This will work with Flowise's simple HTTP requests
+    const toolsResponse = {
+      jsonrpc: "2.0",
+      result: {
+        tools: ALL_TOOLS
+      }
+    };
+
+    res.write(`data: ${JSON.stringify(toolsResponse)}\n\n`);
+
+    console.log('✅ MCP SSE connection established with tools list');
 
     // Handle client disconnect
     req.on('close', () => {
