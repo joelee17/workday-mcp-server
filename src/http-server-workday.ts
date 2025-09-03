@@ -1171,12 +1171,23 @@ app.get('/health', (req, res) => {
   });
 });
 
-// MCP tools endpoint
+// MCP tools endpoint - returns JSON-RPC format for Flowise compatibility
 app.get('/mcp/tools', async (req, res) => {
   try {
-    res.json({ tools: ALL_TOOLS });
+    res.json({
+      jsonrpc: "2.0",
+      result: {
+        tools: ALL_TOOLS
+      }
+    });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    res.status(500).json({
+      jsonrpc: "2.0",
+      error: {
+        code: -32603,
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    });
   }
 });
 
