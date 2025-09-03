@@ -569,7 +569,10 @@ const ALL_TOOLS = [
 // Set up all MCP handlers (copied from main index.ts)
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: ALL_TOOLS,
+    jsonrpc: "2.0",
+    result: {
+      tools: ALL_TOOLS,
+    }
   };
 });
 
