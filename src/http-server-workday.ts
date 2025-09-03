@@ -7,6 +7,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+
 import express from 'express';
 import cors from 'cors';
 import https from 'https';
@@ -1311,13 +1312,51 @@ app.post('/mcp/tools/:toolName', async (req, res) => {
   }
 });
 
+// SSE endpoint for MCP protocol
+app.get('/mcp/sse', async (req, res) => {
+  try {
+    console.log('📡 SSE connection requested');
+
+    // Set SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control',
+    });
+
+    // Send initial connection message
+    res.write('data: {"type": "connection", "message": "MCP SSE connection established"}\n\n');
+
+    // Handle client disconnect
+    req.on('close', () => {
+      console.log('📡 SSE connection closed');
+    });
+
+    // Keep connection alive
+    const keepAlive = setInterval(() => {
+      res.write(': keepalive\n\n');
+    }, 30000);
+
+    req.on('close', () => {
+      clearInterval(keepAlive);
+    });
+
+  } catch (error) {
+    console.error('SSE connection error:', error);
+    res.status(500).end();
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`🚀 MCP Workday Server running on port ${PORT}`);
   console.log(`📋 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔧 MCP tools: http://localhost:${PORT}/mcp/tools`);
+  console.log(`🔧 MCP REST API: http://localhost:${PORT}/mcp/tools`);
+  console.log(`📡 MCP SSE endpoint: http://localhost:${PORT}/mcp/sse`);
   console.log(`🎯 Environment: ${process.env.NODE_ENV || 'development'}`);
 }); // Force redeploy
 // Force redeploy 2
