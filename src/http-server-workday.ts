@@ -1309,3 +1309,4 @@ app.listen(PORT, () => {
   console.log(`🔧 MCP tools: http://localhost:${PORT}/mcp/tools`);
   console.log(`🎯 Environment: ${process.env.NODE_ENV || 'development'}`);
 }); // Force redeploy
+// Force redeploy 2
