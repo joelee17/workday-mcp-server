@@ -1308,4 +1308,4 @@ app.listen(PORT, () => {
   console.log(`📋 Health check: http://localhost:${PORT}/health`);
   console.log(`🔧 MCP tools: http://localhost:${PORT}/mcp/tools`);
   console.log(`🎯 Environment: ${process.env.NODE_ENV || 'development'}`);
-}); 
+}); // Force redeploy
